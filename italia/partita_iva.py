@@ -107,3 +107,39 @@ def ufficio_partita_iva(partita_iva: str) -> str:
         return "speciale"
 
     raise ValueError(f"codice ufficio {codice!r} non ammesso")
+
+
+def valida_partita_iva(numero: str) -> bool:
+    """
+    Dice se `numero` è una partita IVA formalmente valida.
+
+    Fonte: `fonti/partita_iva.md` §1 (formato), §2 (progressivo),
+           §3 (codice ufficio), §4 (checksum Luhn).
+
+        >>> valida_partita_iva("00743110157")
+        True
+        >>> valida_partita_iva("00743110158")
+        False
+        >>> valida_partita_iva("00000000000")
+        False
+    """
+    try:
+        piva = normalizza_partita_iva(numero)
+    except ValueError:
+        return False
+
+    # §2: progressivo (cifre 1-7) non può essere 0000000
+    if piva[:7] == "0000000":
+        return False
+
+    # §3: codice ufficio (cifre 8-10) deve essere ammesso
+    try:
+        ufficio_partita_iva(piva)
+    except ValueError:
+        return False
+
+    # §4: checksum Luhn sulle prime 10 cifre
+    if cifra_controllo_partita_iva(piva[:10]) != int(piva[10]):
+        return False
+
+    return True
