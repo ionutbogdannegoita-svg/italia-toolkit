@@ -21,6 +21,21 @@ Il numero è di **11 cifre**, sempre e solo cifre:
 - Esattamente **11 caratteri**, tutti **cifre** `0-9`.
 - Gli zeri iniziali sono **significativi**: `00743110157` non è
   `743110157`. Chi la tratta come un intero perde i primi zeri e sbaglia.
+- **`0-9` vuol dire `0-9` ASCII, e `str.isdigit()` non basta a dirlo.**
+  In Python `'١٢٣٤٥٦٧٨٩٠'.isdigit()` è `True` (cifre arabo-indiane), e così
+  `'０１２３４５６７８９'` (fullwidth). Anche `int()` le converte senza
+  protestare. Una partita IVA è un numero attribuito dall'Anagrafe tributaria e
+  scritto in cifre arabe: quelle stringhe **non sono partite IVA**.
+  La forma da usare è:
+
+  ```python
+  numero.isascii() and numero.isdigit()      # <- entrambi, sempre
+  ```
+
+  Vale per **ogni** funzione di questa libreria che controlla delle cifre, non
+  solo per la partita IVA. Il riferimento fa la stessa cosa: `python-stdnum` non
+  usa `str.isdigit()` ma una sua `stdnum.util.isdigits()`, che accetta soltanto
+  `0123456789`.
 - In ingresso si tollerano e si scartano: spazi, trattini, punti, e il
   prefisso `IT` (usato nelle transazioni intracomunitarie).
   `IT 00743110157` e `007-431-101-57` sono lo stesso numero.
@@ -158,6 +173,8 @@ Formati equivalenti che devono essere accettati e ricondotti a
 | `0074311015` | 10 cifre |
 | `007431101570` | 12 cifre |
 | `0074311015X` | carattere non numerico |
+| `٠٠٧٤٣١١٠١٥٧` | **cifre arabo-indiane**: 11 caratteri, `str.isdigit()` dice `True`, ma non sono `0-9` (§1) |
+| `００７４３１１０１５７` | idem, cifre **fullwidth** |
 | *(stringa vuota)* | lunghezza 0 |
 | `00000000000` | progressivo `0000000`, mai assegnato — **il checksum torna** |
 | `00000010009` | ufficio `000` inesistente — **il checksum torna** |
@@ -210,6 +227,7 @@ bisogno dei suoi vettori: eccoli già derivati e verificati con
 | `"007431101A"` | carattere non numerico |
 | `"007431 015"` | contiene uno spazio |
 | `"0074311015 "` | spazio in coda: **10 cifre più uno spazio, non 10 caratteri** |
+| `"٠٠٧٤٣١١٠١٥"` | cifre arabo-indiane: 10 caratteri, ma non `0-9` (§1) |
 
 > Attenzione a non finire fuori strada: **`0074311015` sta fra i validi.**
 > Metterlo fra quelli da rifiutare perché "assomiglia" a una P.IVA incompleta
@@ -227,7 +245,8 @@ bisogno dei suoi vettori: eccoli già derivati e verificati con
 | `"007.431.101.57"` | `"00743110157"` ⚠ vedi nota |
 
 Da rifiutare con `ValueError`: `""`, `"0074311015"` (10 cifre),
-`"007431101570"` (12 cifre), `"0074311015X"` (lettera in mezzo alle cifre).
+`"007431101570"` (12 cifre), `"0074311015X"` (lettera in mezzo alle cifre),
+e `"٠٠٧٤٣١١٠١٥٧"` (cifre arabo-indiane: 11 caratteri, ma non `0-9` — §1).
 
 > ⚠ **Sui punti siamo più tolleranti del riferimento.**
 > `stdnum.it.iva.compact` toglie spazi, trattini e due punti, **ma non i
@@ -269,6 +288,26 @@ difetti — sono due domande diverse a cui si risponde in modo diverso.
 > ripulito e **solleva un'eccezione** sugli invalidi. Scrivere
 > `assert valida_partita_iva(x) == iva.validate(x)` confronta un `bool` con
 > una `str` e fallisce su ogni singolo vettore, buono o cattivo che sia.
+
+> ⚠ **Le cifre non-ASCII sono fuori dal confronto con `compact`, e il motivo è
+> peggiore di una semplice divergenza.** `stdnum.it.iva.compact` **non valida**:
+> su `"٠٠٧٤٣١١٠١٥٧"` restituisce la stringa invariata, esattamente come faceva
+> la nostra `normalizza_partita_iva` col difetto dentro. Le due funzioni erano
+> **d'accordo nello sbagliare**, quindi il confronto differenziale con `compact`
+> è passato verde per tutto il tempo e non ha visto niente.
+> Dopo la correzione del §1 la nostra rifiuta e `compact` accetta: il confronto
+> con `compact` va fatto **solo su ingressi di cifre ASCII**. Su quelle
+> non-ASCII decidono i vettori del §5.2, non la libreria.
+>
+> Da qui la regola generale, che vale per ogni caso futuro: **quando una nostra
+> funzione è più severa del riferimento, il confronto differenziale va limitato,
+> e va scritto qui.** Un riferimento che non implementa il nostro controllo non
+> è un oracolo per quel controllo — né quando ci contraddice, né, ed è il caso
+> più insidioso, quando ci dà ragione per caso.
+>
+> `stdnum.luhn.calc_check_digit` invece **solleva** `ValueError` sulle cifre
+> non-ASCII: per `cifra_controllo_partita_iva` il riferimento è severo e il
+> confronto resta pieno.
 
 > ⚠ **I punti sono fuori dal confronto, anche per `valida_partita_iva`.**
 > La divergenza sui punti del §5.2 non riguarda solo la normalizzazione: si

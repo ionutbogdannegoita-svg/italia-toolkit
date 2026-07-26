@@ -43,7 +43,23 @@ va spezzato qui, non fatto passare allentando la guardia.
 | T002 | `normalizza_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | — | toglie spazi, trattini, punti e il prefisso `IT`; restituisce le 11 cifre o solleva `ValueError` (§1) |
 | T004 | `ufficio_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T002 | dalle cifre 8-10 restituisce `'provinciale'` o `'speciale'`; solleva `ValueError` se il codice non è ammesso (§3, vettori §3.1) |
 | T001 | `valida_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T003, T002, T004 | `True`/`False`: **compone** le tre sopra e aggiunge il solo controllo che manca, progressivo ≠ `0000000` (§2) |
+| T022 | `cifra_controllo_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T003 | **riparazione:** rifiutare le cifre non-ASCII (`isascii() and isdigit()`, §1) |
+| T023 | `normalizza_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T002 | **riparazione:** rifiutare le cifre non-ASCII (`isascii() and isdigit()`, §1) |
 | T005 | `valida_codice_fiscale_ente` | `italia/partita_iva.py` | `partita_iva.md` | T003 | codice fiscale delle persone giuridiche: stesso checksum, **senza** il vincolo sull'ufficio |
+
+> **Le riparazioni sono task come gli altri.** `T022` e `T023` non costruiscono
+> una funzione nuova: correggono una che c'è già e ha superato guardie e CI. Il
+> difetto l'ha trovato il **Collaudatore**, che ha fatto il suo lavoro: ha
+> registrato `BUG SOSPETTO`, ha scartato il test avversario e ha lasciato
+> decidere a un umano invece di cambiare il codice da solo.
+>
+> Gli ID sono nuovi, `T022` e `T023`: la regola in cima a questo file dice che
+> gli ID non si riusano, quindi una riparazione **non** riapre `T003` o `T002`.
+> Così nel registro resta scritto che quel codice è stato scritto una volta e
+> corretto un'altra, con due date diverse.
+>
+> Sono due task e non uno perché sono due funzioni: un task, una funzione. Vale
+> anche quando la correzione è la stessa riga in entrambe.
 
 > **Perché quest'ordine, e non `valida_partita_iva` per prima.** Ci abbiamo
 > provato: il primo giro reale ha prodotto 271 righe di diff contro un tetto di
