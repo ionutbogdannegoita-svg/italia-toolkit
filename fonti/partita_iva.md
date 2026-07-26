@@ -121,13 +121,17 @@ Formati equivalenti che devono essere accettati e ricondotti a
 | `0074311015X` | carattere non numerico |
 | *(stringa vuota)* | lunghezza 0 |
 | `00000000000` | progressivo `0000000`, mai assegnato — **il checksum torna** |
-| `00000010007` | ufficio `000` inesistente — **il checksum torna** |
+| `00000010009` | ufficio `000` inesistente — **il checksum torna** |
 | `01234567897` | ufficio `789` inesistente — **il checksum torna** |
 | `12345678903` | ufficio `890` inesistente — **il checksum torna** |
 
 > Gli ultimi quattro sono i vettori che contano: un'implementazione che si
 > ferma al checksum li accetta tutti. Sono il motivo per cui i controlli sul
-> progressivo e sull'ufficio non sono facoltativi.
+> progressivo e sull'ufficio non sono facoltativi. Per ciascuno la cifra di
+> controllo è **quella giusta**: verificato con `stdnum.luhn.calc_check_digit`
+> sulle prime 10 cifre. Non sostituirli con numeri "simili": `00000010007`,
+> per esempio, ha la cifra di controllo sbagliata (la giusta è `9`) e quindi
+> sarebbe respinto dal checksum, senza dimostrare niente sull'ufficio.
 
 ### 5.1 Vettori per la sola cifra di controllo (10 cifre in ingresso)
 
@@ -216,7 +220,7 @@ difetti — sono due domande diverse a cui si risponde in modo diverso.
 |---|---|---|
 | `cifra_controllo_partita_iva` | `stdnum.luhn.calc_check_digit(dieci_cifre)` | stessa identica regola: solo §4. **Restituisce una stringa** (`'7'`), la nostra un intero: confrontare `str(nostro) == riferimento` |
 | `normalizza_partita_iva` | `stdnum.it.iva.compact(x)` | solo §1. `compact` pulisce e basta, **non valida**: confronta solo sugli ingressi che la nostra funzione accetta. E **mai su ingressi con un punto**: `compact` i punti non li toglie, noi sì (§5.2) |
-| `valida_partita_iva` | `stdnum.it.iva.is_valid(x)` — **`is_valid`, non `validate`** | l'unica nostra funzione che implementa **tutta** la regola. Qui la corrispondenza dev'essere piena |
+| `valida_partita_iva` | `stdnum.it.iva.is_valid(x)` — **`is_valid`, non `validate`** | l'unica nostra funzione che implementa **tutta** la regola: su tutte le stringhe di sole cifre la corrispondenza è piena. **Ma mai su ingressi con un punto**, per lo stesso motivo di `normalizza_partita_iva` (vedi la nota qui sotto) |
 | `ufficio_partita_iva` | *(nessuno)* | `stdnum` non espone il codice ufficio: solo vettori e proprietà |
 | `valida_codice_fiscale_ente` | *(nessuno)* | `stdnum.it.iva` impone il vincolo sull'ufficio, che qui **non** vale |
 
@@ -226,6 +230,16 @@ difetti — sono due domande diverse a cui si risponde in modo diverso.
 > ripulito e **solleva un'eccezione** sugli invalidi. Scrivere
 > `assert valida_partita_iva(x) == iva.validate(x)` confronta un `bool` con
 > una `str` e fallisce su ogni singolo vettore, buono o cattivo che sia.
+
+> ⚠ **I punti sono fuori dal confronto, anche per `valida_partita_iva`.**
+> La divergenza sui punti del §5.2 non riguarda solo la normalizzazione: si
+> propaga a **ogni** nostra funzione che normalizza l'ingresso prima di
+> giudicarlo. `valida_partita_iva("007.431.101.57")` è **`True`** per la nostra
+> §1, mentre `iva.is_valid("007.431.101.57")` è **`False`**, perché `compact`
+> lascia i punti dove sono e il numero fallisce il controllo di formato.
+> Quindi: nel confronto differenziale su `valida_partita_iva` metti `IT`,
+> spazi e trattini quanto vuoi, **mai un punto**. Che i punti vadano accettati
+> lo dicono i vettori del §5.2, non `stdnum`.
 
 ### L'errore da non fare, con nome e cognome
 
