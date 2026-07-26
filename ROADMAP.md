@@ -45,21 +45,38 @@ va spezzato qui, non fatto passare allentando la guardia.
 | T001 | `valida_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T003, T002, T004 | `True`/`False`: **compone** le tre sopra e aggiunge il solo controllo che manca, progressivo ≠ `0000000` (§2) |
 | T022 | `cifra_controllo_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T003 | **riparazione:** rifiutare le cifre non-ASCII (`isascii() and isdigit()`, §1) |
 | T023 | `normalizza_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T002 | **riparazione:** rifiutare le cifre non-ASCII (`isascii() and isdigit()`, §1) |
+| T024 | `ufficio_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T004 | **riparazione:** rifiutare le cifre non-ASCII **per il motivo giusto** — le respingeva già, ma con l'errore sbagliato (§1) |
 | T005 | `valida_codice_fiscale_ente` | `italia/partita_iva.py` | `partita_iva.md` | T003 | codice fiscale delle persone giuridiche: stesso checksum, **senza** il vincolo sull'ufficio |
 
-> **Le riparazioni sono task come gli altri.** `T022` e `T023` non costruiscono
-> una funzione nuova: correggono una che c'è già e ha superato guardie e CI. Il
-> difetto l'ha trovato il **Collaudatore**, che ha fatto il suo lavoro: ha
-> registrato `BUG SOSPETTO`, ha scartato il test avversario e ha lasciato
-> decidere a un umano invece di cambiare il codice da solo.
+> **Le riparazioni sono task come gli altri.** `T022`, `T023` e `T024` non
+> costruiscono una funzione nuova: correggono una che c'è già e ha superato
+> guardie e CI. Il difetto l'ha trovato il **Collaudatore**, che ha fatto il suo
+> lavoro: ha registrato `BUG SOSPETTO`, ha scartato il test avversario e ha
+> lasciato decidere a un umano invece di cambiare il codice da solo.
 >
-> Gli ID sono nuovi, `T022` e `T023`: la regola in cima a questo file dice che
-> gli ID non si riusano, quindi una riparazione **non** riapre `T003` o `T002`.
-> Così nel registro resta scritto che quel codice è stato scritto una volta e
-> corretto un'altra, con due date diverse.
+> Gli ID sono nuovi: la regola in cima a questo file dice che gli ID non si
+> riusano, quindi una riparazione **non** riapre `T003`, `T002` o `T004`. Così
+> nel registro resta scritto che quel codice è stato scritto una volta e corretto
+> un'altra, con due date diverse.
 >
-> Sono due task e non uno perché sono due funzioni: un task, una funzione. Vale
-> anche quando la correzione è la stessa riga in entrambe.
+> Sono tre task e non uno perché sono tre funzioni: un task, una funzione. Vale
+> anche quando la correzione è la stessa riga in tutte e tre — ed è proprio
+> quando è la stessa riga che viene la tentazione di farle tutte insieme. Ci ha
+> provato l'Operaio di `T022`, correggendone tre in un colpo: il codice era
+> giusto, ma due funzioni su tre sono finite su un repo pubblico senza un test
+> che le verificasse, perché il controllo di mutazione svuota solo la funzione
+> del task. Da allora c'è una guardia che lo impedisce
+> (`ciclo.guardia_perimetro_del_task`).
+>
+> **`T024` è il più sottile dei tre**, e vale come esempio per le riparazioni
+> future. Il difetto era **latente**: `ufficio_partita_iva` respingeva già le
+> cifre arabo-indiane, ma per caso — il confronto `'001' <= codice <= '100'` fra
+> stringhe fallisce da sé, perché quei codepoint stanno sopra `'9'` — e sollevava
+> l'errore sbagliato, quello sul codice ufficio invece che sul formato. Un test
+> che verifichi soltanto *«solleva `ValueError`»* sarebbe nato **verde** e non
+> avrebbe provato niente. Il task ha dovuto chiedere di verificare il **motivo**
+> del rifiuto. Quando un difetto è latente, il test deve puntare alla causa, non
+> all'effetto.
 
 > **Perché quest'ordine, e non `valida_partita_iva` per prima.** Ci abbiamo
 > provato: il primo giro reale ha prodotto 271 righe di diff contro un tetto di
