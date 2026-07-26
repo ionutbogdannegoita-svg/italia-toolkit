@@ -222,7 +222,32 @@ checksum. Un'implementazione che fa solo il CIN li accetta tutti, ed è rotta.
 
 ---
 
-## 10. Cosa questa fonte NON copre
+## 10. Confronto differenziale: quale riferimento per quale funzione
+
+L'oracolo #3 regge a una condizione sola: **il riferimento deve implementare la
+stessa regola, non una più grande.** `stdnum.it.codicefiscale.validate`
+controlla formato, mese, giorno, Belfiore *e* CIN tutti insieme: confrontarlo
+con una nostra funzione che ne fa uno solo produce fallimenti che non sono
+difetti.
+
+| nostra funzione | riferimento corretto | note |
+|---|---|---|
+| `cin_codice_fiscale` | `stdnum.it.codicefiscale.calc_check_digit(primi15)` | stessa regola: solo §7. **Restituisce una stringa** (`'U'`) |
+| `valida_codice_fiscale` | `stdnum.it.codicefiscale.validate(x)` | l'unica che implementa tutta la regola. Corrispondenza piena attesa |
+| `normalizza_codice_fiscale` | `stdnum.it.codicefiscale.compact(x)` | pulisce e basta, non valida |
+| `estrai_data_nascita` | `stdnum.it.codicefiscale.get_birth_date(x)` | **attenzione**: `stdnum` restituisce una data completa e *indovina il secolo*. Noi no, di proposito (§3). Confrontare solo giorno e mese |
+| `estrai_sesso` | `stdnum.it.codicefiscale.get_gender(x)` | restituisce `'M'`/`'F'` come noi |
+| `iniziali_cognome`, `iniziali_nome`, `sciogli_omocodia`, `genera_codice_fiscale` | *(nessuno)* | `stdnum` non li espone: solo vettori del §9 e proprietà |
+
+**Non riscrivere l'algoritmo dentro il test** per poi confrontarlo con la
+funzione: se chi ha scritto il test ha letto male questo documento, le due
+copie sbagliano insieme e il verde conferma l'errore. L'oracolo sono i vettori
+del §9 e la libreria di riferimento, non una seconda implementazione fatta in
+casa.
+
+---
+
+## 11. Cosa questa fonte NON copre
 
 Sono domini a sé, ognuno con la propria fonte da scrivere prima del task:
 

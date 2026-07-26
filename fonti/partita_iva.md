@@ -131,7 +131,60 @@ Formati equivalenti che devono essere accettati e ricondotti a
 
 ---
 
-## 6. Cosa questa fonte NON copre
+## 6. Confronto differenziale: quale riferimento per quale funzione
+
+L'oracolo #3 confronta le nostre funzioni con `python-stdnum` su input casuali.
+Funziona a una condizione sola, e non è negoziabile:
+
+> **Il riferimento deve implementare la STESSA regola, non una più grande.**
+
+`stdnum.it.iva.validate` applica **tutte e quattro** le regole di questo
+documento: formato, progressivo, ufficio e checksum. Confrontarlo con una
+nostra funzione che ne implementa una sola produce fallimenti che non sono
+difetti — sono due domande diverse a cui si risponde in modo diverso.
+
+| nostra funzione | riferimento corretto | note |
+|---|---|---|
+| `cifra_controllo_partita_iva` | `stdnum.luhn.calc_check_digit(dieci_cifre)` | stessa identica regola: solo §4. **Restituisce una stringa** (`'7'`), la nostra un intero: confrontare `str(nostro) == riferimento` |
+| `normalizza_partita_iva` | `stdnum.it.iva.compact(x)` | solo §1. `compact` pulisce e basta, **non valida**: confronta solo sugli ingressi che la nostra funzione accetta |
+| `valida_partita_iva` | `stdnum.it.iva.validate(x)` | l'unica nostra funzione che implementa **tutta** la regola. Qui la corrispondenza dev'essere piena |
+| `ufficio_partita_iva` | *(nessuno)* | `stdnum` non espone il codice ufficio: solo vettori e proprietà |
+| `valida_codice_fiscale_ente` | *(nessuno)* | `stdnum.it.iva` impone il vincolo sull'ufficio, che qui **non** vale |
+
+### L'errore da non fare, con nome e cognome
+
+```python
+# SBAGLIATO — proprietà falsa, Hypothesis la smonta in un secondo
+@given(st.text(min_size=10, max_size=10, alphabet="0123456789"))
+def test_checksum_corretto_rende_valido(dieci):
+    completo = dieci + str(cifra_controllo_partita_iva(dieci))
+    assert iva.validate(completo) == completo      # <- '0000000000' → InvalidFormat
+```
+
+`0000000000` più la sua cifra di controllo dà `00000000000`: il checksum torna,
+ma il progressivo è `0000000` e `iva.validate` giustamente rifiuta. La
+proprietà afferma qualcosa che `cifra_controllo_partita_iva` **non promette**.
+
+```python
+# GIUSTO — la proprietà dice solo quello che questa funzione garantisce
+@given(st.text(min_size=10, max_size=10, alphabet="0123456789"))
+def test_coincide_col_luhn_di_riferimento(dieci):
+    assert str(cifra_controllo_partita_iva(dieci)) == luhn.calc_check_digit(dieci)
+```
+
+### E non riscrivere l'algoritmo dentro il test
+
+Un test che ricalcola il checksum con un secondo pezzo di codice scritto lì
+per lì, e poi confronta le due implementazioni, non verifica niente: se chi ha
+scritto il test ha letto male questo documento, **le due copie sbagliano
+insieme** e il verde conferma l'errore.
+
+L'oracolo sono i vettori del §5, che sono stati verificati a mano, e la
+libreria di riferimento. Non una seconda implementazione fatta in casa.
+
+---
+
+## 7. Cosa questa fonte NON copre
 
 - **Codice fiscale delle persone giuridiche.** È un numero di 11 cifre con lo
   stesso identico checksum, ma **non** ha il vincolo dell'ufficio: può avere
