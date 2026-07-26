@@ -39,11 +39,20 @@ va spezzato qui, non fatto passare allentando la guardia.
 
 | ID | funzione | modulo | fonte | dipende | cosa deve fare |
 |---|---|---|---|---|---|
-| T001 | `valida_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | — | `True`/`False` su 11 cifre: formato, progressivo ≠ 0000000, ufficio ammesso, checksum Luhn |
-| T002 | `normalizza_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T001 | toglie spazi, trattini, punti e il prefisso `IT`; restituisce le 11 cifre o solleva `ValueError` |
-| T003 | `cifra_controllo_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T001 | dalle prime 10 cifre calcola l'undicesima |
+| T003 | `cifra_controllo_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | — | dalle prime 10 cifre calcola l'undicesima (Luhn, §4) |
+| T002 | `normalizza_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | — | toglie spazi, trattini, punti e il prefisso `IT`; restituisce le 11 cifre o solleva `ValueError` (§1) |
+| T001 | `valida_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T003, T002 | `True`/`False`: **compone** le due sopra e aggiunge progressivo ≠ 0000000 e ufficio ammesso (§2, §3) |
 | T004 | `ufficio_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T002 | estrae le cifre 8-10 e dice se è un ufficio provinciale o speciale |
 | T005 | `valida_codice_fiscale_ente` | `italia/partita_iva.py` | `partita_iva.md` | T003 | codice fiscale delle persone giuridiche: stesso checksum, **senza** il vincolo sull'ufficio |
+
+> **Perché quest'ordine, e non `valida_partita_iva` per prima.** Ci abbiamo
+> provato: il primo giro reale ha prodotto 271 righe di diff contro un tetto di
+> 150, ed è stato bocciato. Chiedere in un colpo solo formato, progressivo,
+> ufficio e checksum, con tutti i vettori della fonte, è un task mal
+> decomposto. Le primitive prima, la composizione dopo: ogni pezzo sta sotto
+> il tetto e `valida_partita_iva` diventa quattro righe che chiamano le altre.
+> Gli ID non sono stati rinumerati — la regola in cima a questo file dice che
+> non si fa — è cambiato l'ordine.
 
 ## Blocco 2 — Codice fiscale
 *Fonte pronta: [`fonti/codice_fiscale.md`](fonti/codice_fiscale.md)*
