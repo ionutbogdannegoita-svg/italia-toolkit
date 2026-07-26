@@ -129,6 +129,75 @@ Formati equivalenti che devono essere accettati e ricondotti a
 > ferma al checksum li accetta tutti. Sono il motivo per cui i controlli sul
 > progressivo e sull'ufficio non sono facoltativi.
 
+### 5.1 Vettori per la sola cifra di controllo (10 cifre in ingresso)
+
+Le tabelle sopra sono per il numero **intero**, da 11 cifre. Una funzione che
+calcola *solo* la cifra di controllo prende in ingresso le **prime 10**, e ha
+bisogno dei suoi vettori: eccoli già derivati e verificati con
+`stdnum.luhn.calc_check_digit`. **Copiali, non ricavarli** — ricavarli a mano
+è il modo più facile di sbagliare.
+
+**Ingressi validi** → la cifra che deve uscire:
+
+| 10 cifre | cifra | da quale P.IVA |
+|---|---|---|
+| `0074311015` | **7** | `00743110157` — esempio svolto al §4 |
+| `0764352056` | **7** | `07643520567` |
+| `1337852015` | **2** | `13378520152` |
+| `1234567001` | **7** | `12345670017` |
+| `9999999120` | **3** | `99999991203` |
+| `5000000888` | **3** | `50000008883` |
+| `0000001999` | **2** | `00000019992` |
+| `0000000000` | **0** | *nessuna* — vedi la nota qui sotto |
+
+> **`0000000000` → `0` è un ingresso VALIDO per questa funzione.** Il numero
+> completo `00000000000` non è una partita IVA valida (progressivo `0000000`,
+> §2), ma quello è un problema di `valida_partita_iva`, non del calcolo del
+> checksum. Una funzione che calcola una cifra non ha titolo per rifiutare un
+> input di 10 cifre: le calcola e basta. È il vettore che separa le due
+> responsabilità, e va tenuto.
+
+**Ingressi da rifiutare** (`ValueError`) — e nessun altro:
+
+| ingresso | perché |
+|---|---|
+| `""` | 0 cifre |
+| `"007431101"` | 9 cifre |
+| `"00743110157"` | 11 cifre |
+| `"007431101A"` | carattere non numerico |
+| `"007431 015"` | contiene uno spazio |
+| `"0074311015 "` | spazio in coda: **10 cifre più uno spazio, non 10 caratteri** |
+
+> Attenzione a non finire fuori strada: **`0074311015` sta fra i validi.**
+> Metterlo fra quelli da rifiutare perché "assomiglia" a una P.IVA incompleta
+> è un errore già capitato. Dieci cifre sono dieci cifre.
+
+### 5.2 Vettori per la sola normalizzazione
+
+| ingresso | risultato |
+|---|---|
+| `"00743110157"` | `"00743110157"` (invariato) |
+| `"IT00743110157"` | `"00743110157"` |
+| `"IT 00743110157"` | `"00743110157"` |
+| `"007-431-101-57"` | `"00743110157"` |
+| `" 00743110157 "` | `"00743110157"` |
+| `"007.431.101.57"` | `"00743110157"` ⚠ vedi nota |
+
+Da rifiutare con `ValueError`: `""`, `"0074311015"` (10 cifre),
+`"007431101570"` (12 cifre), `"0074311015X"` (lettera in mezzo alle cifre).
+
+> ⚠ **Sui punti siamo più tolleranti del riferimento.**
+> `stdnum.it.iva.compact` toglie spazi, trattini e due punti, **ma non i
+> punti**: su `"007.431.101.57"` restituisce la stringa invariata. Noi i punti
+> li togliamo, perché in Italia il numero si scrive anche così.
+> Conseguenza per l'oracolo #3: il confronto differenziale con `compact` vale
+> **solo sugli ingressi che non contengono punti**. Sui punti decidono i
+> vettori di questa tabella, non la libreria.
+
+> La normalizzazione **non guarda il checksum**: `"00743110158"` ha la cifra
+> di controllo sbagliata e va restituito invariato lo stesso. Rifiutarlo è
+> compito di `valida_partita_iva`.
+
 ---
 
 ## 6. Confronto differenziale: quale riferimento per quale funzione
@@ -146,7 +215,7 @@ difetti — sono due domande diverse a cui si risponde in modo diverso.
 | nostra funzione | riferimento corretto | note |
 |---|---|---|
 | `cifra_controllo_partita_iva` | `stdnum.luhn.calc_check_digit(dieci_cifre)` | stessa identica regola: solo §4. **Restituisce una stringa** (`'7'`), la nostra un intero: confrontare `str(nostro) == riferimento` |
-| `normalizza_partita_iva` | `stdnum.it.iva.compact(x)` | solo §1. `compact` pulisce e basta, **non valida**: confronta solo sugli ingressi che la nostra funzione accetta |
+| `normalizza_partita_iva` | `stdnum.it.iva.compact(x)` | solo §1. `compact` pulisce e basta, **non valida**: confronta solo sugli ingressi che la nostra funzione accetta. E **mai su ingressi con un punto**: `compact` i punti non li toglie, noi sì (§5.2) |
 | `valida_partita_iva` | `stdnum.it.iva.validate(x)` | l'unica nostra funzione che implementa **tutta** la regola. Qui la corrispondenza dev'essere piena |
 | `ufficio_partita_iva` | *(nessuno)* | `stdnum` non espone il codice ufficio: solo vettori e proprietà |
 | `valida_codice_fiscale_ente` | *(nessuno)* | `stdnum.it.iva` impone il vincolo sull'ufficio, che qui **non** vale |
