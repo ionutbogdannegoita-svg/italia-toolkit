@@ -91,9 +91,9 @@ def ufficio_partita_iva(partita_iva: str) -> str:
         ...
         ValueError: codice ufficio '000' non ammesso
     """
-    if len(partita_iva) != 11 or not partita_iva.isdigit():
+    if len(partita_iva) != 11 or not partita_iva.isascii() or not partita_iva.isdigit():
         raise ValueError(
-            f"partita IVA deve essere 11 cifre, non {partita_iva!r}"
+            f"partita IVA deve essere 11 cifre decimali ASCII, non {partita_iva!r}"
         )
 
     codice = partita_iva[7:10]
