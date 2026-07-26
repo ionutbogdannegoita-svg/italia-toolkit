@@ -63,8 +63,6 @@ def normalizza_partita_iva(numero: str) -> str:
     # Rimuovi spazi, trattini, punti
     s = s.replace(" ", "").replace("-", "").replace(".", "")
     # Verifica che il risultato sia esattamente 11 cifre
-    # NOTA: manca il controllo isascii() del §1 — lo aggiunge il task T023,
-    # con i suoi test. Vedi il commit che ha rimosso la correzione fuori mandato.
     if len(s) != 11 or not s.isdigit():
         raise ValueError(
             f"la partita IVA normalizzata deve avere 11 cifre, "
@@ -93,8 +91,6 @@ def ufficio_partita_iva(partita_iva: str) -> str:
         ...
         ValueError: codice ufficio '000' non ammesso
     """
-    # NOTA: manca il controllo isascii() del §1 — lo aggiunge il task T024,
-    # con i suoi test. Vedi il commit che ha rimosso la correzione fuori mandato.
     if len(partita_iva) != 11 or not partita_iva.isdigit():
         raise ValueError(
             f"partita IVA deve essere 11 cifre, non {partita_iva!r}"
