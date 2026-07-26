@@ -216,9 +216,16 @@ difetti — sono due domande diverse a cui si risponde in modo diverso.
 |---|---|---|
 | `cifra_controllo_partita_iva` | `stdnum.luhn.calc_check_digit(dieci_cifre)` | stessa identica regola: solo §4. **Restituisce una stringa** (`'7'`), la nostra un intero: confrontare `str(nostro) == riferimento` |
 | `normalizza_partita_iva` | `stdnum.it.iva.compact(x)` | solo §1. `compact` pulisce e basta, **non valida**: confronta solo sugli ingressi che la nostra funzione accetta. E **mai su ingressi con un punto**: `compact` i punti non li toglie, noi sì (§5.2) |
-| `valida_partita_iva` | `stdnum.it.iva.validate(x)` | l'unica nostra funzione che implementa **tutta** la regola. Qui la corrispondenza dev'essere piena |
+| `valida_partita_iva` | `stdnum.it.iva.is_valid(x)` — **`is_valid`, non `validate`** | l'unica nostra funzione che implementa **tutta** la regola. Qui la corrispondenza dev'essere piena |
 | `ufficio_partita_iva` | *(nessuno)* | `stdnum` non espone il codice ufficio: solo vettori e proprietà |
 | `valida_codice_fiscale_ente` | *(nessuno)* | `stdnum.it.iva` impone il vincolo sull'ufficio, che qui **non** vale |
+
+> **`is_valid`, non `validate`.** Le nostre `valida_*` restituiscono un
+> booleano. In `python-stdnum` la funzione che restituisce un booleano si
+> chiama **`is_valid`**; `validate` restituisce la *stringa* del numero
+> ripulito e **solleva un'eccezione** sugli invalidi. Scrivere
+> `assert valida_partita_iva(x) == iva.validate(x)` confronta un `bool` con
+> una `str` e fallisce su ogni singolo vettore, buono o cattivo che sia.
 
 ### L'errore da non fare, con nome e cognome
 

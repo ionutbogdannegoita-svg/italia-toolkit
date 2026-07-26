@@ -233,7 +233,7 @@ difetti.
 | nostra funzione | riferimento corretto | note |
 |---|---|---|
 | `cin_codice_fiscale` | `stdnum.it.codicefiscale.calc_check_digit(primi15)` | stessa regola: solo §7. **Restituisce una stringa** (`'U'`) |
-| `valida_codice_fiscale` | `stdnum.it.codicefiscale.validate(x)` | l'unica che implementa tutta la regola. Corrispondenza piena attesa |
+| `valida_codice_fiscale` | `stdnum.it.codicefiscale.is_valid(x)` | l'unica che implementa tutta la regola. Corrispondenza piena attesa |
 | `normalizza_codice_fiscale` | `stdnum.it.codicefiscale.compact(x)` | pulisce e basta, non valida |
 | `estrai_data_nascita` | `stdnum.it.codicefiscale.get_birth_date(x)` | **attenzione**: `stdnum` restituisce una data completa e *indovina il secolo*. Noi no, di proposito (§3). Confrontare solo giorno e mese |
 | `estrai_sesso` | `stdnum.it.codicefiscale.get_gender(x)` | restituisce `'M'`/`'F'` come noi |
