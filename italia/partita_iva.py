@@ -53,7 +53,7 @@ def normalizza_partita_iva(numero: str) -> str:
         >>> normalizza_partita_iva("IT 007-431.101.57")
         '00743110157'
 
-    Solleva ValueError se il risultato non è esattamente 11 cifre decimali.
+    Solleva ValueError se il risultato non è esattamente 11 cifre decimali ASCII.
     Non valida checksum né codice ufficio.
     """
     s = numero.strip()
@@ -62,10 +62,10 @@ def normalizza_partita_iva(numero: str) -> str:
         s = s[2:].lstrip()
     # Rimuovi spazi, trattini, punti
     s = s.replace(" ", "").replace("-", "").replace(".", "")
-    # Verifica che il risultato sia esattamente 11 cifre
-    if len(s) != 11 or not s.isdigit():
+    # Verifica che il risultato sia esattamente 11 cifre decimali ASCII
+    if len(s) != 11 or not s.isascii() or not s.isdigit():
         raise ValueError(
-            f"la partita IVA normalizzata deve avere 11 cifre, "
+            f"la partita IVA normalizzata deve avere 11 cifre decimali ASCII, "
             f"non {s!r}"
         )
     return s
