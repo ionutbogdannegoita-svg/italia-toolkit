@@ -69,3 +69,41 @@ def normalizza_partita_iva(numero: str) -> str:
             f"non {s!r}"
         )
     return s
+
+
+def ufficio_partita_iva(partita_iva: str) -> str:
+    """
+    Restituisce il tipo di ufficio che ha attribuito la partita IVA.
+
+    Prende una P.IVA di 11 cifre già normalizzata, ne guarda le cifre 8-10
+    (codice ufficio) e restituisce 'provinciale' per i codici da 001 a 100
+    inclusi, oppure 'speciale' per 120, 121, 888 e 999.
+    Su qualunque altro codice solleva ValueError.
+
+    Fonte: `fonti/partita_iva.md` §3 (codice ufficio) e §3.1 (vettori di confine).
+
+        >>> ufficio_partita_iva("00743110157")
+        'provinciale'
+        >>> ufficio_partita_iva("99999991203")
+        'speciale'
+        >>> ufficio_partita_iva("00743110007")
+        Traceback (most recent call last):
+        ...
+        ValueError: codice ufficio '000' non ammesso
+    """
+    if len(partita_iva) != 11 or not partita_iva.isdigit():
+        raise ValueError(
+            f"partita IVA deve essere 11 cifre, non {partita_iva!r}"
+        )
+
+    codice = partita_iva[7:10]
+
+    # Uffici provinciali: 001-100 inclusi
+    if "001" <= codice <= "100":
+        return "provinciale"
+
+    # Uffici speciali
+    if codice in ("120", "121", "888", "999"):
+        return "speciale"
+
+    raise ValueError(f"codice ufficio {codice!r} non ammesso")
