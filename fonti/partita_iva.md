@@ -75,10 +75,18 @@ coincide con la tabella qui sopra (zero divergenze, controllate una per una).
 | `999` | **sì** | speciale |
 
 > Attenzione a `100`: l'intervallo è **inclusivo**. Chi scrive `< 100` invece di
-> `<= 100` esclude un ufficio vero, e **nessun vettore del §5 lo becca**: fra i
-> noti-buoni non c'è nemmeno una partita IVA con ufficio `100`. Quell'errore lo
-> trova solo questa tabella. Vale lo stesso, a specchio, per `001`: chi parte da
-> `000` accetta un ufficio che non esiste.
+> `<= 100` esclude un ufficio vero. Il caso è coperto due volte, di proposito:
+> qui dalla riga `100`, e nel §5 dalla partita IVA `00000011007`, che è stata
+> aggiunta apposta perché prima **nessun noti-buono aveva ufficio `100`** e
+> l'errore passava. Vale lo stesso, a specchio, per `001`: chi parte da `000`
+> accetta un ufficio che non esiste.
+
+> **A chi servono queste tre cifre e a chi no.** Questa tabella è l'oracolo di
+> `ufficio_partita_iva` (§3), che prende una partita IVA e guarda solo le cifre
+> 8-10. `valida_partita_iva` **non ripete questi casi**: chiama
+> `ufficio_partita_iva` e si fida. Ricollaudare qui i confini dell'ufficio
+> significa scrivere due volte lo stesso esame e pagarlo due volte sul tetto
+> del diff.
 
 > Questo controllo è deliberatamente **incluso** in `valida_partita_iva`.
 > Motivo pratico: è quello che fa anche `python-stdnum` (`stdnum.it.iva`), la
@@ -133,6 +141,7 @@ Cifra di controllo = `(10 − (23 mod 10)) mod 10` = `(10 − 3) mod 10` = **7**
 | `07643520567` | `056` | |
 | `13378520152` | `015` | |
 | `12345670017` | `001` | confine inferiore dell'intervallo uffici |
+| `00000011007` | `100` | confine **superiore** dell'intervallo, incluso |
 | `99999991203` | `120` | ufficio speciale |
 | `50000008883` | `888` | ufficio speciale |
 | `00000019992` | `999` | ufficio speciale, progressivo minimo (`0000001`) |
