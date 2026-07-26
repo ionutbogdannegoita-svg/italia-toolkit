@@ -42,6 +42,29 @@ def test_normalizza_rimuove_spazi_trattini_punti_prefisso(
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Normalizzazione NON valida il checksum — §5.2
+#
+# La fonte dice esplicitamente: "La normalizzazione non guarda il checksum:
+# '00743110158' ha la cifra di controllo sbagliata e va restituito invariato
+# lo stesso. Rifiutarlo è compito di valida_partita_iva."
+# ═══════════════════════════════════════════════════════════════════════
+
+NOTI_BUONI_NO_CHECKSUM = [
+    ("00743110158", "00743110158"),        # checksum errato, ma normalizza
+    ("IT00743110158", "00743110158"),      # checksum errato con prefisso IT
+    ("007-431-101-58", "00743110158"),     # checksum errato con trattini
+    (" 00743110158 ", "00743110158"),      # checksum errato con spazi
+]
+
+
+@pytest.mark.parametrize("ingresso,atteso", NOTI_BUONI_NO_CHECKSUM)
+def test_normalizza_non_valida_checksum(ingresso: str, atteso: str) -> None:
+    """La normalizzazione non guarda il checksum: §5.2."""
+    from italia.partita_iva import normalizza_partita_iva
+    assert normalizza_partita_iva(ingresso) == atteso
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Vettori da rifiutare — §5.2, tabella "da rifiutare con ValueError"
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -58,6 +81,58 @@ NOTI_CATTIVI_VALUE_ERROR = [
 @pytest.mark.parametrize("ingresso", NOTI_CATTIVI_VALUE_ERROR)
 def test_rifiuta_ingressi_non_ascii_o_lunghezza_errata(ingresso: str) -> None:
     """Ingressi con cifre non-ASCII o lunghezza != 11 sollevano ValueError."""
+    from italia.partita_iva import normalizza_partita_iva
+    with pytest.raises(ValueError):
+        normalizza_partita_iva(ingresso)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Confini del prefisso IT — §1
+#
+# Casi limite sul prefisso IT: solo prefisso, prefisso + cifre non-ASCII,
+# prefisso + lunghezza sbagliata. Tutti devono essere rifiutati.
+# ═══════════════════════════════════════════════════════════════════════
+
+NOTI_CATTIVI_IT_CONFINE = [
+    ("IT٠٠٧٤٣١١٠١٥٧", "prefisso IT + cifre arabo-indiane (§1)"),
+    ("IT００７４３１１０１５７", "prefisso IT + cifre fullwidth (§1)"),
+    ("IT0074311015", "prefisso IT + 10 cifre (lunghezza sbagliata)"),
+    ("IT007431101570", "prefisso IT + 12 cifre (lunghezza sbagliata)"),
+    ("IT0074311015X", "prefisso IT + carattere non numerico"),
+    ("IT", "solo prefisso IT, nessuna cifra"),
+    ("IT ", "prefisso IT + spazio, nessuna cifra"),
+    ("IT-", "prefisso IT + trattino, nessuna cifra"),
+    ("IT.", "prefisso IT + punto, nessuna cifra"),
+]
+
+
+@pytest.mark.parametrize("ingresso,ragione", NOTI_CATTIVI_IT_CONFINE)
+def test_rifiuta_prefisso_it_casi_confine(ingresso: str, ragione: str) -> None:
+    """Il prefisso IT non salva ingressi con cifre non-ASCII o lunghezza errata."""
+    from italia.partita_iva import normalizza_partita_iva
+    with pytest.raises(ValueError):
+        normalizza_partita_iva(ingresso)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Solo separatori — §1
+#
+# Stringhe composte esclusivamente da spazi, trattini, punti o combinazioni
+# di questi: dopo la pulizia diventano vuote, quindi ValueError.
+# ═══════════════════════════════════════════════════════════════════════
+
+NOTI_CATTIVI_SEPARATORI = [
+    "   ",       # solo spazi
+    "---",       # solo trattini
+    "...",       # solo punti
+    " - . ",     # mischia separatori
+    "IT - . ",   # prefisso IT + separatori
+]
+
+
+@pytest.mark.parametrize("ingresso", NOTI_CATTIVI_SEPARATORI)
+def test_rifiuta_solo_separatori(ingresso: str) -> None:
+    """Solo separatori producono stringa vuota dopo pulizia → ValueError."""
     from italia.partita_iva import normalizza_partita_iva
     with pytest.raises(ValueError):
         normalizza_partita_iva(ingresso)
