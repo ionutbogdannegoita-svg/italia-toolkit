@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "italia-toolkit"
+version = "0.1.0"
+description = "Funzioni pure per il dominio italiano: codice fiscale, partita IVA, IBAN."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ionut Bogdan Negoita" }]
+keywords = ["italia", "codice-fiscale", "partita-iva", "iban", "validazione"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: Italian",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
+
+# Nessuna dipendenza di runtime, e non è una svista: questa libreria è fatta
+# di funzioni pure. Chi la installa non si porta dietro nient'altro.
+dependencies = []
+
+[project.optional-dependencies]
+# `python-stdnum` è il secondo parere del confronto differenziale (oracolo #3).
+# Vive SOLO qui: nessun modulo di `italia/` lo importa.
+dev = [
+    "pytest>=8",
+    "hypothesis>=6",
+    "python-stdnum>=1.19",
+]
+
+[project.urls]
+Homepage = "https://github.com/ionutbogdannegoita-svg/italia-toolkit"
+
+[tool.setuptools.packages.find]
+include = ["italia*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"

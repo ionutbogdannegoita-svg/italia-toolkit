@@ -1,0 +1,70 @@
+# Il giudice indipendente.
+#
+# Gira su GitHub, non sulla macchina del loop, su tre versioni di Python.
+# Il loop NON puo' modificare questo file: `.github/workflows/` e' in
+# PERCORSI_VIETATI e la guardia boccia il diff prima del commit.
+#
+# Se la CI e' rossa e i test locali erano verdi, ha ragione la CI.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Installa il pacchetto e le dipendenze di test
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: pytest
+        run: python -m pytest
+
+  # Controllo che non costa nulla e che un giorno salvera' la giornata:
+  # la libreria deve importarsi SENZA le dipendenze di test installate.
+  # Se qualcuno infila `stdnum` dentro `italia/`, qui si accorge subito.
+  runtime-pulito:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Installa SOLO il pacchetto, senza extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Importa la libreria a mani nude
+        run: |
+          cd /tmp
+          python -c "import italia; print('italia-toolkit', italia.__version__)"
+
+      - name: Nessuna dipendenza di runtime deve essere finita nel pacchetto
+        run: |
+          if python -c "import stdnum" 2>/dev/null; then
+            echo "::error::stdnum risulta installato: e' finito fra le dipendenze di runtime"
+            exit 1
+          fi
+          echo "ok: stdnum non installato, la libreria gira a mani nude"

@@ -1,0 +1,10 @@
+# Fine riga LF ovunque, dentro e fuori dal repository.
+#
+# Non e' pignoleria: le guardie contano le righe aggiunte e rimosse nel diff
+# per decidere se un task e' troppo grande. Un diff sporco di CR/LF falsa il
+# conteggio e puo' far bocciare un task buono o passarne uno enorme.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
