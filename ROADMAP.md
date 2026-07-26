@@ -41,8 +41,8 @@ va spezzato qui, non fatto passare allentando la guardia.
 |---|---|---|---|---|---|
 | T003 | `cifra_controllo_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | — | dalle prime 10 cifre calcola l'undicesima (Luhn, §4) |
 | T002 | `normalizza_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | — | toglie spazi, trattini, punti e il prefisso `IT`; restituisce le 11 cifre o solleva `ValueError` (§1) |
-| T001 | `valida_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T003, T002 | `True`/`False`: **compone** le due sopra e aggiunge progressivo ≠ 0000000 e ufficio ammesso (§2, §3) |
-| T004 | `ufficio_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T002 | estrae le cifre 8-10 e dice se è un ufficio provinciale o speciale |
+| T004 | `ufficio_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T002 | dalle cifre 8-10 restituisce `'provinciale'` o `'speciale'`; solleva `ValueError` se il codice non è ammesso (§3, vettori §3.1) |
+| T001 | `valida_partita_iva` | `italia/partita_iva.py` | `partita_iva.md` | T003, T002, T004 | `True`/`False`: **compone** le tre sopra e aggiunge il solo controllo che manca, progressivo ≠ `0000000` (§2) |
 | T005 | `valida_codice_fiscale_ente` | `italia/partita_iva.py` | `partita_iva.md` | T003 | codice fiscale delle persone giuridiche: stesso checksum, **senza** il vincolo sull'ufficio |
 
 > **Perché quest'ordine, e non `valida_partita_iva` per prima.** Ci abbiamo
@@ -53,6 +53,22 @@ va spezzato qui, non fatto passare allentando la guardia.
 > il tetto e `valida_partita_iva` diventa quattro righe che chiamano le altre.
 > Gli ID non sono stati rinumerati — la regola in cima a questo file dice che
 > non si fa — è cambiato l'ordine.
+
+> **Secondo riordino, 26 luglio, per lo stesso motivo.** Con T003 e T002 già
+> fatti, T001 è stato bocciato **di nuovo** dalla guardia del tetto: 214 righe,
+> di cui 172 di soli test. Stavolta il codice era corretto, pytest verde e la
+> mutazione superata: non era un problema di qualità, era ancora un problema di
+> taglia. La causa: T001 doveva costruire da zero **tutta** la regola del §3,
+> cinque intervalli con i loro confini, e sono i vettori dell'ufficio a fare
+> volume.
+>
+> `T004` esisteva già, ma stava **dopo**: la primitiva dell'ufficio veniva
+> chiesta dopo la funzione che ne ha bisogno. Spostata prima, con la firma
+> chiarita perché sia componibile. Ora T001 ha davvero una regola sola da
+> aggiungere, il §2, che è una riga.
+>
+> È la seconda volta che la guardia del tetto boccia T001 e la seconda volta
+> che aveva ragione lei. Il tetto non è stato toccato nessuna delle due.
 
 ## Blocco 2 — Codice fiscale
 *Fonte pronta: [`fonti/codice_fiscale.md`](fonti/codice_fiscale.md)*

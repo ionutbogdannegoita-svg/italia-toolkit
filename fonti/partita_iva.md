@@ -50,6 +50,36 @@ Identifica l'ufficio provinciale che ha attribuito il numero.
 Qualunque altro valore (`000`, `101`-`119`, `122`-`887`, `889`-`998`) rende il
 numero invalido, **anche se il checksum torna**.
 
+### 3.1 Vettori di confine — copiali, non derivarli
+
+Gli errori su questa regola stanno tutti sui bordi. Questi quindici casi sono
+già verificati contro `stdnum.it.iva`, che su tutti i 1000 codici possibili
+coincide con la tabella qui sopra (zero divergenze, controllate una per una).
+
+| codice | ammesso | perché |
+|---|---|---|
+| `000` | **no** | sotto il primo ufficio |
+| `001` | **sì** | primo ufficio provinciale |
+| `002` | **sì** | |
+| `099` | **sì** | |
+| `100` | **sì** | ultimo ufficio provinciale, **incluso** |
+| `101` | **no** | primo escluso dopo l'intervallo |
+| `119` | **no** | |
+| `120` | **sì** | speciale |
+| `121` | **sì** | speciale |
+| `122` | **no** | primo escluso dopo i due speciali |
+| `887` | **no** | |
+| `888` | **sì** | speciale |
+| `889` | **no** | |
+| `998` | **no** | |
+| `999` | **sì** | speciale |
+
+> Attenzione a `100`: l'intervallo è **inclusivo**. Chi scrive `< 100` invece di
+> `<= 100` esclude un ufficio vero, e **nessun vettore del §5 lo becca**: fra i
+> noti-buoni non c'è nemmeno una partita IVA con ufficio `100`. Quell'errore lo
+> trova solo questa tabella. Vale lo stesso, a specchio, per `001`: chi parte da
+> `000` accetta un ufficio che non esiste.
+
 > Questo controllo è deliberatamente **incluso** in `valida_partita_iva`.
 > Motivo pratico: è quello che fa anche `python-stdnum` (`stdnum.it.iva`), la
 > libreria di riferimento dell'oracolo #3. Se lo omettessimo, il confronto
