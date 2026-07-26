@@ -18,9 +18,9 @@ def cifra_controllo_partita_iva(dieci_cifre: str) -> int:
         >>> cifra_controllo_partita_iva("0000000000")
         0
 
-    Solleva ValueError se l'ingresso non è esattamente 10 cifre decimali.
+    Solleva ValueError se l'ingresso non è esattamente 10 cifre decimali ASCII.
     """
-    if len(dieci_cifre) != 10 or not dieci_cifre.isdigit():
+    if len(dieci_cifre) != 10 or not dieci_cifre.isascii() or not dieci_cifre.isdigit():
         raise ValueError(
             f"ingresso deve essere esattamente 10 cifre decimali, "
             f"non {dieci_cifre!r}"
@@ -63,7 +63,7 @@ def normalizza_partita_iva(numero: str) -> str:
     # Rimuovi spazi, trattini, punti
     s = s.replace(" ", "").replace("-", "").replace(".", "")
     # Verifica che il risultato sia esattamente 11 cifre
-    if len(s) != 11 or not s.isdigit():
+    if len(s) != 11 or not s.isascii() or not s.isdigit():
         raise ValueError(
             f"la partita IVA normalizzata deve avere 11 cifre, "
             f"non {s!r}"
@@ -91,7 +91,7 @@ def ufficio_partita_iva(partita_iva: str) -> str:
         ...
         ValueError: codice ufficio '000' non ammesso
     """
-    if len(partita_iva) != 11 or not partita_iva.isdigit():
+    if len(partita_iva) != 11 or not partita_iva.isascii() or not partita_iva.isdigit():
         raise ValueError(
             f"partita IVA deve essere 11 cifre, non {partita_iva!r}"
         )
