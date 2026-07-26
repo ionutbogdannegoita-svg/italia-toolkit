@@ -257,3 +257,117 @@ def test_ufficio_non_ammesso_solleva_value_error(codice: int) -> None:
     piuva = "0000000" + f"{codice:03d}" + "0"
     with pytest.raises(ValueError):
         ufficio_partita_iva(piuva)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# valida_partita_iva — vettori §5 (noti-buoni e noti-cattivi)
+# Fonte: fonti/partita_iva.md §1 (formato), §2 (progressivo),
+#        §3 (codice ufficio), §4 (checksum Luhn) e §5 (vettori).
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Noti-BUONI del §5 ───────────────────────────────────────────────
+
+NOTI_BUONI_VALIDA = [
+    "00743110157",   # esempio svolto §4, ufficio 015
+    "07643520567",   # ufficio 056
+    "13378520152",   # ufficio 015
+    "12345670017",   # confine inferiore ufficio 001
+    "00000011007",   # confine superiore ufficio 100, incluso
+    "99999991203",   # ufficio speciale 120
+    "50000008883",   # ufficio speciale 888
+    "00000019992",   # ufficio speciale 999, progressivo minimo
+]
+
+FORMATI_EQUIVALENTI = [
+    "IT00743110157",
+    "IT 00743110157",
+    "007-431-101-57",
+    " 00743110157 ",
+]
+
+
+@pytest.mark.parametrize("numero", NOTI_BUONI_VALIDA)
+def test_accetta_noti_buoni(numero: str) -> None:
+    """Tutte le partite IVA note-buone del §5 risultano valide."""
+    from italia.partita_iva import valida_partita_iva
+    assert valida_partita_iva(numero) is True
+
+
+@pytest.mark.parametrize("formato", FORMATI_EQUIVALENTI)
+def test_accetta_formati_equivalenti(formato: str) -> None:
+    """Formati con IT, spazi, trattini vengono accettati."""
+    from italia.partita_iva import valida_partita_iva
+    assert valida_partita_iva(formato) is True
+
+
+# ── Noti-CATTIVI del §5 ─────────────────────────────────────────────
+
+NOTI_CATTIVI_VALIDA = [
+    ("00743110158", "cifra di controllo errata"),
+    ("0074311015", "10 cifre"),
+    ("007431101570", "12 cifre"),
+    ("0074311015X", "carattere non numerico"),
+    ("", "stringa vuota"),
+    ("00000000000", "progressivo 0000000 — checksum torna"),
+    ("00000010009", "ufficio 000 inesistente — checksum torna"),
+    ("01234567897", "ufficio 789 inesistente — checksum torna"),
+    ("12345678903", "ufficio 890 inesistente — checksum torna"),
+]
+
+
+@pytest.mark.parametrize("numero,motivo", NOTI_CATTIVI_VALIDA)
+def test_rifiuta_noti_cattivi(numero: str, motivo: str) -> None:
+    """Tutte le partite IVA note-cattive del §5 risultano non valide."""
+    from italia.partita_iva import valida_partita_iva
+    assert valida_partita_iva(numero) is False
+
+
+# ── Proprietà: checksum errato → invalido ───────────────────────────
+
+@given(st.text(min_size=10, max_size=10, alphabet="0123456789"))
+def test_solo_la_cifra_giusta_e_accettata(dieci: str) -> None:
+    """Partendo da 10 cifre, solo la cifra di controllo giusta rende valido."""
+    from italia.partita_iva import cifra_controllo_partita_iva, valida_partita_iva
+    giusta = cifra_controllo_partita_iva(dieci)
+    for sbagliata in range(10):
+        if sbagliata != giusta:
+            assert valida_partita_iva(dieci + str(sbagliata)) is False
+
+
+# ── Confronto differenziale con stdnum.it.iva.is_valid ──────────────
+
+DIFFERENZIALI = [
+    "00743110157",
+    "IT00743110157",
+    "IT 00743110157",
+    "007-431-101-57",
+    " 00743110157 ",
+    "00743110158",
+    "00000000000",
+    "00000010009",
+    "01234567897",
+    "12345678903",
+]
+
+
+@pytest.mark.parametrize("ingresso", DIFFERENZIALI)
+def test_coincide_con_stdnum_is_valid(ingresso: str) -> None:
+    """Su ingressi senza punti, coincide con stdnum.it.iva.is_valid."""
+    from italia.partita_iva import valida_partita_iva
+    import stdnum.it.iva as iva
+    assert valida_partita_iva(ingresso) == iva.is_valid(ingresso)
+
+
+@given(st.text(min_size=1, max_size=20, alphabet="0123456789 IT- "))
+def test_coincide_con_stdnum_su_cifre_pure(carattere: str) -> None:
+    """Su stringhe di sole cifre (con separatori/IT), coincide con stdnum."""
+    from italia.partita_iva import valida_partita_iva
+    import stdnum.it.iva as iva
+    # Saltiamo i punti: stdnum non li toglie, noi sì
+    if "." in carattere:
+        pytest.skip("punti: divergenza nota con stdnum")
+    try:
+        atteso = iva.is_valid(carattere)
+    except Exception:
+        atteso = False
+    assert valida_partita_iva(carattere) == atteso
