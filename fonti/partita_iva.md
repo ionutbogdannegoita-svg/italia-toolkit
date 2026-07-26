@@ -262,6 +262,48 @@ def test_coincide_col_luhn_di_riferimento(dieci):
     assert str(cifra_controllo_partita_iva(dieci)) == luhn.calc_check_digit(dieci)
 ```
 
+### Il secondo errore da non fare: "rovinare" un numero preso a caso
+
+Undici cifre a caso **non sono una partita IVA valida**: lo è appena l'**1,1%**
+(misurato su 20.000 estrazioni). Quindi qualunque proprietà che parta da cifre
+casuali e le "guasti" per ottenere un numero invalido è falsa in partenza:
+quasi sempre sta guastando un numero **già** invalido, e a volte lo ripara.
+
+```python
+# SBAGLIATO — Hypothesis trova il contro-esempio in un secondo
+@given(st.text(min_size=11, max_size=11, alphabet="0123456789"))
+def test_checksum_errato_rifiuta_sempre(numero):
+    rotto = numero[:-1] + str((int(numero[-1]) + 1) % 10)   # "+1 sull'ultima"
+    assert valida_partita_iva(rotto) is False
+```
+
+`00031820359` ha la cifra di controllo sbagliata (la giusta è `0`): è già
+invalido. Il `+1` porta il `9` a `0`, cioè **alla cifra giusta**, e produce
+`00031820350`, che è valido. Il test dichiara `False` e riceve `True`.
+Misurato: **208 contro-esempi su 20.000**, cioè esattamente quell'1,1%.
+
+La proprietà si scrive partendo dalle **dieci** cifre, non dalle undici: la
+cifra giusta si calcola, e si afferma che **ogni altra** è rifiutata.
+
+```python
+# GIUSTO — verificato vero su 5.000 × 9 casi
+@given(st.text(min_size=10, max_size=10, alphabet="0123456789"))
+def test_solo_la_cifra_giusta_e_accettata(dieci):
+    giusta = cifra_controllo_partita_iva(dieci)
+    for sbagliata in range(10):
+        if sbagliata != giusta:
+            assert valida_partita_iva(dieci + str(sbagliata)) is False
+```
+
+Questa regge sempre, e non ha bisogno di sapere niente su progressivo e
+ufficio: se il checksum non torna, il numero è invalido comunque.
+
+> La regola generale, che vale anche per le funzioni che verranno:
+> **per costruire un caso valido si parte dai pezzi e si calcola** (progressivo
+> + ufficio ammesso + cifra calcolata → valido, §5.1); **per costruire un caso
+> invalido si parte da un caso valido e si guasta**, non da un numero a caso.
+> Prendere a caso e sperare che sia valido è la strada per una proprietà falsa.
+
 ### E non riscrivere l'algoritmo dentro il test
 
 Un test che ricalcola il checksum con un secondo pezzo di codice scritto lì
