@@ -178,6 +178,41 @@ si ottiene `RSSMRA85M01H50M` + CIN ricalcolato = **`RSSMRA85M01H50MI`**.
 > Tutti calcolati e incrociati con `python-stdnum 2.2`
 > (`stdnum.it.codicefiscale`) prima di essere scritti qui.
 
+### 9.0 Vettori per il solo CIN (15 caratteri in ingresso) — copiali, non ricavarli
+
+Le tabelle qui sotto sono per il codice **intero**, da 16 caratteri.
+`cin_codice_fiscale` prende in ingresso i **primi 15** e restituisce il
+sedicesimo: ha bisogno dei suoi vettori, ed eccoli già derivati e verificati con
+`stdnum.it.codicefiscale.calc_check_digit`. **Copiali, non ricavarli** —
+ricavarli a mano è il modo più facile di sbagliare.
+
+| primi 15 caratteri | CIN | dal codice |
+|---|---|---|
+| `RSSMRA80A01H501` | **U** | `RSSMRA80A01H501U` |
+| `MRTMTT25D09F205` | **Z** | `MRTMTT25D09F205Z` |
+| `DLCNNA90B52L219` | **V** | `DLCNNA90B52L219V` |
+| `FOXDAA00T71H501` | **U** | `FOXDAA00T71H501U` |
+| `MLLSNT82P65Z404` | **U** | `MLLSNT82P65Z404U` |
+| `RSSMRA85M00H501` | **R** | `RSSMRA85M00H501R` |
+
+> ⚠ **Quindici caratteri sono la lunghezza GIUSTA, non una lunghezza errata.**
+> È un errore già capitato: `RSSMRA85M01H501` è finito fra i vettori da
+> rifiutare, con la nota *«solo 15 caratteri, manca il CIN»*. Il CIN manca
+> perché è esattamente ciò che la funzione deve **calcolare**. Un ingresso di 15
+> caratteri alfanumerici maiuscoli si accetta e produce una lettera; se ne
+> arrivano 16, *quello* è l'errore.
+
+**Ingressi da rifiutare** (`ValueError`) — e nessun altro:
+
+| ingresso | perché |
+|---|---|
+| `""` | 0 caratteri |
+| `"RSSMRA80A01H50"` | 14 caratteri |
+| `"RSSMRA80A01H501U"` | **16** caratteri: è il codice completo, non i primi 15 |
+| `"rssmra80a01h501"` | minuscole |
+| `"RSSMRA80A01H50!"` | carattere non alfanumerico |
+| `"RSSMRA80A01H50 "` | spazio in coda: 14 caratteri più uno spazio |
+
 ### Noti-BUONI — devono risultare validi
 
 | codice | persona | note |
