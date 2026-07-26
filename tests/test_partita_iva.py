@@ -371,3 +371,62 @@ def test_coincide_con_stdnum_su_cifre_pure(carattere: str) -> None:
     except Exception:
         atteso = False
     assert valida_partita_iva(carattere) == atteso
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# valida_partita_iva — COLLAUDO: test avversari
+# ═══════════════════════════════════════════════════════════════════════
+
+def test_accetta_punti_nel_formato() -> None:
+    """I punti sono separatori tollerati (§1, §5.2).
+
+    Fonte: fonti/partita_iva.md §5.2 — la tabella di normalizzazione
+    mostra che "007.431.101.57" → "00743110157". E "00743110157" è
+    un noto-buono (§5). Quindi valida_partita_iva deve restituire True.
+    """
+    from italia.partita_iva import valida_partita_iva
+    assert valida_partita_iva("007.431.101.57") is True
+
+
+def test_progressivo_zero_ufficio_valido_checksum_giusto() -> None:
+    """Progressivo 0000000 con ufficio valido e checksum corretto → False (§2).
+
+    Costruita con cifra_controllo_partita_iva("0000000015").
+    Progressivo 0000000, ufficio 015 (valido), checksum calcolato.
+    Il §2 dice che 00000000000 non è valida; questo caso è analogo
+    ma con checksum corretto e ufficio valido — il progressivo zero
+    è il motivo del rifiuto, non il checksum né l'ufficio.
+    """
+    from italia.partita_iva import valida_partita_iva, cifra_controllo_partita_iva
+    dieci = "0000000015"
+    cifra = cifra_controllo_partita_iva(dieci)
+    numero = dieci + str(cifra)  # es. "00000000158"
+    assert valida_partita_iva(numero) is False
+
+
+def test_it_minuscolo() -> None:
+    """Il prefisso IT è case-insensitive (§1).
+
+    Il codice fa .upper().startswith("IT"), quindi accetta anche "it".
+    """
+    from italia.partita_iva import valida_partita_iva
+    assert valida_partita_iva("it00743110157") is True
+
+
+def test_solo_prefisso_IT() -> None:
+    """Solo "IT" senza cifre → False.
+
+    Dopo la rimozione del prefisso, resta una stringa vuota,
+    che non ha 11 cifre.
+    """
+    from italia.partita_iva import valida_partita_iva
+    assert valida_partita_iva("IT") is False
+
+
+def test_solo_spazi() -> None:
+    """Stringa di soli spazi → False.
+
+    Dopo strip() e rimozione separatori, resta vuoto.
+    """
+    from italia.partita_iva import valida_partita_iva
+    assert valida_partita_iva("   ") is False
