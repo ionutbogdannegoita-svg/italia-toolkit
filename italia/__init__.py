@@ -15,4 +15,6 @@ vettori di prova. Vedi `fonti/README.md`.
 
 __version__ = "0.1.0"
 
-__all__ = ["__version__"]
+from italia.partita_iva import estrai_partita_iva, valida_partita_iva
+
+__all__ = ["__version__", "estrai_partita_iva", "valida_partita_iva"]

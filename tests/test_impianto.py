@@ -32,10 +32,12 @@ FONTI_ATTESE = {
 class TestPacchetto:
     def test_il_pacchetto_si_importa(self):
         import italia
+
         assert italia is not None
 
     def test_dichiara_la_versione(self):
         import italia
+
         assert italia.__version__.count(".") == 2
 
 
@@ -44,10 +46,12 @@ class TestDipendenzeDiTest:
 
     def test_hypothesis_disponibile(self):
         import hypothesis
+
         assert hypothesis.given is not None
 
     def test_libreria_di_riferimento_disponibile(self):
         from stdnum.it import iva
+
         assert iva.validate("00743110157") == "00743110157"
 
     def test_la_libreria_di_riferimento_non_e_una_dipendenza_di_runtime(self):
@@ -67,9 +71,9 @@ class TestOracolo:
     def test_ogni_fonte_esiste_e_contiene_ancora_l_algoritmo(self, nome, impronta):
         percorso = FONTI / nome
         assert percorso.is_file(), f"fonte sparita: fonti/{nome}"
-        assert impronta in percorso.read_text(encoding="utf-8"), (
-            f"fonti/{nome} esiste ma non contiene più {impronta!r}"
-        )
+        assert impronta in percorso.read_text(
+            encoding="utf-8"
+        ), f"fonti/{nome} esiste ma non contiene più {impronta!r}"
 
     def test_le_fonti_non_sono_segnaposto_vuoti(self):
         for nome in FONTI_ATTESE:
@@ -81,6 +85,6 @@ class TestOracolo:
         sorveglia: o la si mette in FONTI_ATTESE, o non sta in `fonti/`.
         """
         trovate = {f.name for f in FONTI.glob("*.md")}
-        assert trovate == set(FONTI_ATTESE), (
-            f"non dichiarate: {trovate - set(FONTI_ATTESE)}"
-        )
+        assert trovate == set(
+            FONTI_ATTESE
+        ), f"non dichiarate: {trovate - set(FONTI_ATTESE)}"
