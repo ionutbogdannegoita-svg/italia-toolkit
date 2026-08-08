@@ -1,0 +1,90 @@
+Metadata-Version: 2.4
+Name: italia-toolkit
+Version: 0.1.0
+Summary: Funzioni pure per il dominio italiano: codice fiscale, partita IVA, IBAN.
+Author: Ionut Bogdan Negoita
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/ionutbogdannegoita-svg/italia-toolkit
+Keywords: italia,codice-fiscale,partita-iva,iban,validazione
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: Italian
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+Requires-Dist: hypothesis>=6; extra == "dev"
+Requires-Dist: python-stdnum>=1.19; extra == "dev"
+Dynamic: license-file
+
+# italia-toolkit
+
+Funzioni **pure** per il dominio italiano: codice fiscale, partita IVA, IBAN.
+Nessuna dipendenza di runtime, nessuna chiamata di rete, nessuno stato.
+
+```python
+from italia.partita_iva import valida_partita_iva
+
+valida_partita_iva("00743110157")   # True
+valida_partita_iva("00743110158")   # False — cifra di controllo errata
+```
+
+> **Stato: in costruzione.** Le funzioni arrivano nell'ordine scritto in
+> [`ROADMAP.md`](ROADMAP.md). Quelle già fatte sono quelle che hanno un test.
+
+## Perché esiste
+
+Perché queste validazioni si finiscono per riscrivere ogni volta, di fretta,
+dentro un progetto che aveva altro da fare — e quasi sempre a metà. Il caso
+tipico: un validatore IBAN che fa il mod-97 internazionale e si dimentica il
+CIN italiano. Passa `IT40S0542811101000000123456`, che IBAN italiano valido
+non è.
+
+## Com'è fatta
+
+Ogni funzione nasce da un algoritmo ufficiale scritto a mano in
+[`fonti/`](fonti/README.md) — DM 23/12/1976 per il codice fiscale,
+DPR 605/1973 per la partita IVA, ISO 13616 per l'IBAN — con i suoi vettori di
+prova verificati. Prima la fonte, poi i test, poi il codice.
+
+I test usano tre oracoli: i vettori ufficiali, le proprietà con Hypothesis, e
+il confronto differenziale con `python-stdnum` su input casuali.
+`python-stdnum` è una dipendenza **di test**: non entra nel pacchetto, e la
+CI lo verifica installando la libreria a mani nude.
+
+## Chi la scrive
+
+Un modello linguistico, in autonomia, sotto vincoli imposti dal codice e non
+dal prompt: ruoli separati (chi scrive il codice non scrive i test), guardie
+sul diff prima di ogni commit, e la CI di GitHub come giudice indipendente
+che il loop non può toccare. Le regole del cantiere stanno in
+[`AGENTS.md`](AGENTS.md).
+
+Il dominio non è stato scelto a caso: su codice fiscale, partita IVA e IBAN
+**decide la matematica, non un'opinione**. Ci sono checksum ufficiali, quindi
+esiste un oracolo che un modello non può aggirare a parole.
+
+## Installazione
+
+```bash
+pip install git+https://github.com/ionutbogdannegoita-svg/italia-toolkit
+```
+
+Python 3.11 o superiore.
+
+## Sviluppo
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m pytest
+```
+
+## Licenza
+
+MIT — vedi [LICENSE](LICENSE).
