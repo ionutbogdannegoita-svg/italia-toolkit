@@ -1,80 +1,53 @@
-```
-# Environment
-.env
-.env.local
-.env.*
+```yaml
+name: Turno Notturno
+on:
+  schedule:
+    # Ogni giorno alle 08:00 UTC (9:00 in Italia)
+    - cron: '0 8 * * *'
+  workflow_dispatch:
 
-# Dependencies
-node_modules/
+jobs:
+  check-time:
+    runs-on: ubuntu-latest
+    outputs:
+      is_night: ${{ steps.time_check.outputs.is_night }}
+    steps:
+      - name: Check if it's night time in Italy
+        id: time_check
+        run: |
+          # Ottieni l'ora attuale in Italia (UTC+1 o UTC+2 a seconda dell'ora legale)
+          ITALY_TIME=$(TZ='Europe/Rome' date +%H)
+          echo "Current time in Italy: $ITALY_TIME:00"
+          
+          # Controlla se è tra le 20:00 e le 07:00 (notte)
+          if [ $ITALY_TIME -ge 20 ] || [ $ITALY_TIME -lt 8 ]; then
+            echo "is_night=true" >> $GITHUB_OUTPUT
+            echo "It's night time in Italy!"
+          else
+            echo "is_night=false" >> $GITHUB_OUTPUT
+            echo "It's day time in Italy!"
+          fi
 
-# Build artifacts
-dist/
-build/
-target/
+  update-readme:
+    needs: check-time
+    if: ${{ needs.check-time.outputs.is_night == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-.ENV
-.venv.bak/
-pip-log.txt
-pip-selfcheck.json
+      - name: Update README.md
+        run: |
+          # Aggiungi un timestamp alla riga della notte
+          sed -i "s/^.*è ancora notte\.\*$/$(date '+%d %B %Y - %H:%M:%S') è ancora notte./" README.md
 
-# Logs
-*.log
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# Temporary files
-*.tmp
-*.temp
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-nbproject/
-
-# Testing
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-
-# Distribution / packaging
-.Python
-*.so
-*.egg-info/
-.eggs/
-eggs/
-parts/
-sdist/
-develop-eggs/
-.installed.cfg
-lib/
-lib64/
-
-# System
-.DS_Store
-Thumbs.db
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "🌙 Aggiornato durante la notte"
+          git push
 ```

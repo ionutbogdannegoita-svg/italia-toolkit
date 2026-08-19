@@ -2,12 +2,13 @@
 #
 # SECURITY MODEL:
 # - Il loop lavora in un runner effimero, non sul branch remoto
-# - Produce commit locali → push su branch turno/<id> → PR
+# - Produce commit locali → bundle → job privilegiato → push su branch turno/<run_id> → PR
 # - La revisione umana e' un hard gate: mai push diretto su sviluppo/main
-# - I secret sono minimizzati: AGNES_API_KEY solo al job, MACCHINA_TOKEN read-only
+# - Separazione dei poteri: chi esegue codice AI (esecuzione-turno) ha solo read;
+#   chi pubblica (pubblicazione-pr) ha write ma non esegue codice non trusted
 #
 # Il lavoro NON finisce su `sviluppo`: il turno committa in locale sul runner,
-# poi il risultato viene spinto su un ramo `turno/<data>` e aperto in Pull
+# poi il risultato viene spinto su un ramo `turno/<run_id>` e aperto in Pull
 # Request. La revisione resta umana, ed e' voluto — la notte del 27 il turno ha
 # committato una funzione sbagliata su otto cognomi italiani comuni su
 # diciannove, le guardie non potevano vederla (diff piccolo e nel perimetro) e
@@ -18,24 +19,12 @@
 #   AGNES_API_KEY   la chiave dell'API Agnes
 #   MACCHINA_TOKEN  un token in sola lettura sul repository privato della
 #                   macchina (Contents: read basta)
+#
+# Environment richiesto: 'turno-notturno' con secrets AGNES_API_KEY e MACCHINA_TOKEN
 
 name: turno notturno
 
 on:
-  # ⚠ IL CRON E' SPENTO DI PROPOSITO, e va acceso solo dopo aver fatto due cose.
-  #
-  # 1. Impostare i due segreti (sotto il titolo di questo file).
-  # 2. **Allineare `sviluppo` su GitHub.** Il runner parte da qui, non dal PC:
-  #    finche' i commit restano in locale, un turno automatico lavorerebbe su
-  #    una base vecchia e cercherebbe di riparare funzioni che li' non esistono.
-  #
-  # Per accendere: togliere il commento alle due righe qui sotto. 22:00 UTC e'
-  # mezzanotte in Italia d'estate. Lo scheduler di GitHub e' "best effort" — puo'
-  # partire con mezz'ora di ritardo — e si spegne da solo dopo 60 giorni senza
-  # attivita' nel repository.
-  #
-  # schedule:
-  #   - cron: '0 22 * * *'
   workflow_dispatch:
     inputs:
       task:
@@ -43,7 +32,7 @@ on:
         required: false
         default: ''
       ore:
-        description: 'budget in ore'
+        description: 'budget in ore (1-24)'
         required: false
         default: '5'
       prova:
@@ -52,29 +41,23 @@ on:
         required: false
         default: false
 
-# Least privilege: write solo per creare il branch e la PR
-# Il job che esegue codice non trusted non ha privilegi di scrittura diretti
-permissions:
-  contents: write
-  pull-requests: write
+# Permissions GLOBALI vuote: ogni job riceve solo ciò che gli serve esplicitamente
+permissions: {}
 
-# Un turno alla volta: due esecuzioni parallele si pesterebbero i piedi
-# cancel-in-progress: false perche' un turno interrotto potrebbe lasciare
-# artifact inconsistenti; meglio far finire quello in corso
 concurrency:
   group: turno-notturno
   cancel-in-progress: false
 
 jobs:
-  # Job 1: EXECUTION — esegue codice non trusted (Agnes) in ambiente isolato
-  # Questo job NON ha privilegi di scrittura sul repository remoto
   esecuzione-turno:
     runs-on: ubuntu-latest
     timeout-minutes: 330
-    
-    # I secret sono disponibili solo qui, dove servono
     environment: turno-notturno
-    
+
+    # SECURITY: read-only — questo job esegue codice non trusted e NON deve poter pushare
+    permissions:
+      contents: read
+
     steps:
       - name: il bersaglio
         uses: actions/checkout@v4
@@ -82,11 +65,9 @@ jobs:
           ref: sviluppo
           fetch-depth: 0
           path: bersaglio
-          # persist-credentials: false di default quando non specificato token
+          # SECURITY: default è true, lo disabilitiamo esplicitamente
+          persist-credentials: false
 
-      # La macchina sta FUORI dal repository bersaglio: dentro, le sue cartelle
-      # comparirebbero come file non tracciati e le guardie le boccerebbero come
-      # "modifica non tracciata".
       - name: la macchina
         uses: actions/checkout@v4
         with:
@@ -106,25 +87,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      # SECURITY: gli input vengono validati prima dell'uso
-      # task: solo ID alfanumerici (es. T001 T002)
-      # ore: solo numeri interi
+      # SECURITY: input passati via env per evitare shell injection
       - name: valida input
         id: validate-inputs
+        env:
+          RAW_TASK: ${{ inputs.task }}
+          RAW_ORE: ${{ inputs.ore }}
         run: |
-          # Validazione task: solo pattern [T][0-9]+ separati da spazio
-          task="${{ inputs.task }}"
+          task="$RAW_TASK"
+          ore="$RAW_ORE"
+          
           if [[ -n "$task" ]]; then
             if ! echo "$task" | grep -qE '^([A-Z][0-9]+)( [A-Z][0-9]+)*$'; then
-              echo "::error::Input task non valido: deve contenere solo ID tipo T001 separati da spazio"
+              echo "::error::Input task non valido"
               exit 1
             fi
           fi
           
-          # Validazione ore: solo numero intero 1-24
-          ore="${{ inputs.ore }}"
           if ! echo "$ore" | grep -qE '^[0-9]+$'; then
-            echo "::error::Input ore non valido: deve essere un numero intero"
+            echo "::error::Input ore non valido"
             exit 1
           fi
           if [[ "$ore" -lt 1 || "$ore" -gt 24 ]]; then
@@ -132,42 +113,34 @@ jobs:
             exit 1
           fi
           
-          echo "task_valid=true" >> $GITHUB_OUTPUT
-          echo "ore_value=$ore" >> $GITHUB_OUTPUT
+          echo "TASK=$task" >> $GITHUB_OUTPUT
+          echo "ORE=$ore" >> $GITHUB_OUTPUT
 
-      # SECURITY: uso di env invece di interpolazione diretta per evitare shell injection
-      # Gli input sono gia' stati validati nello step precedente
       - name: il turno
         working-directory: bersaglio
         env:
           AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
           AGNES_BERSAGLIO: ${{ github.workspace }}/bersaglio
-          VALIDATED_TASK: ${{ steps.validate-inputs.outputs.task_valid && inputs.task || '' }}
-          VALIDATED_ORE: ${{ steps.validate-inputs.outputs.ore_value }}
+          VALIDATED_TASK: ${{ steps.validate-inputs.outputs.TASK }}
+          VALIDATED_ORE: ${{ steps.validate-inputs.outputs.ORE }}
           IS_PROVA: ${{ inputs.prova && 'true' || 'false' }}
         run: |
           git config user.name "Agnes Loop"
           git config user.email "agnes@localhost"
           
-          # Costruisci i flag in modo sicuro usando variabili d'ambiente
+          # Cattura BASE_SHA prima dell'esecuzione
+          echo "$(git rev-parse HEAD)" > /tmp/base_sha.txt
+          
           prova_flag=""
-          if [[ "$IS_PROVA" == "true" ]]; then
-            prova_flag="--prova"
-          fi
+          [[ "$IS_PROVA" == "true" ]] && prova_flag="--prova"
           
           task_args=""
-          if [[ -n "$VALIDATED_TASK" ]]; then
-            task_args="$VALIDATED_TASK"
-          fi
+          [[ -n "$VALIDATED_TASK" ]] && task_args="$VALIDATED_TASK"
           
           python "$GITHUB_WORKSPACE/macchina/officina/notte.py" \
             $prova_flag \
             --ore "$VALIDATED_ORE" \
             $task_args
-        
-        # Un turno che finisce senza task riusciti esce con 1. Non e' un guasto
-        # del workflow: il rapporto va prodotto lo stesso, ed e' la cosa che
-        # serve al mattino.
         continue-on-error: true
         id: esecuzione
 
@@ -175,84 +148,131 @@ jobs:
         if: always()
         id: stato
         run: |
-          if [[ "${{ steps.esecuzione.outcome }}" == "success" ]]; then
-            echo "esito=successo" >> $GITHUB_OUTPUT
-          elif [[ "${{ steps.esecuzione.outcome }}" == "failure" ]]; then
-            echo "esito=fallimento" >> $GITHUB_OUTPUT
+          case "${{ steps.esecuzione.outcome }}" in
+            success) echo "esito=successo" ;;
+            failure) echo "esito=fallimento" ;;
+            *) echo "esito=interrotto" ;;
+          esac >> $GITHUB_OUTPUT
+          
+          cd bersaglio
+          commit_count=$(git log origin/sviluppo..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+          echo "commit_count=${commit_count:-0}" >> $GITHUB_OUTPUT
+          
+          cp /tmp/base_sha.txt /tmp/base_sha_artifact.txt
+
+      - name: crea bundle dei commit
+        if: always()
+        working-directory: bersaglio
+        run: |
+          base_sha=$(cat /tmp/base_sha_artifact.txt)
+          echo "$base_sha" > /tmp/base_sha_for_bundle.txt
+          
+          if git merge-base --is-ancestor "$base_sha" HEAD 2>/dev/null; then
+            git bundle create /tmp/commiti.bundle "$base_sha"..HEAD
+            echo "bundle_created=true" >> $GITHUB_OUTPUT
           else
-            echo "esito=interrotto" >> $GITHUB_OUTPUT
+            touch /tmp/no_bundle.marker
+            echo "bundle_created=false" >> $GITHUB_OUTPUT
           fi
+        id: bundle
 
       - name: il rapporto, comunque vada
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rapporto-${{ github.run_id }}
+          name: turno-risultati-${{ github.run_id }}
           path: |
             macchina/stato/
             macchina/risultati/scartati/
+            /tmp/base_sha_for_bundle.txt
+            /tmp/commiti.bundle
+            /tmp/no_bundle.marker
           if-no-files-found: warn
           retention-days: 30
 
-      # Summary per GitHub UI: rende immediatamente chiaro cosa e' successo
       - name: genera summary
         if: always()
         run: |
-          echo "## Turno Notturno — Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Campo | Valore |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Run ID | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Data | $(date -u +%Y-%m-%d %H:%M UTC) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Esito | ${{ steps.stato.outputs.esito }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Task richiesti | ${{ inputs.task || '(automatico)' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Budget ore | ${{ inputs.ore }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Modalità prova | ${{ inputs.prova && 'SI' || 'NO' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Conta commit prodotti
-          cd bersaglio
-          commit_count=$(git log origin/sviluppo..HEAD --oneline 2>/dev/null | wc -l || echo 0)
-          echo "### Risultati" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit prodotti:** $commit_count" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ -f "$GITHUB_WORKSPACE/macchina/stato/RAPPORTO.md" ]]; then
-            echo "- **Rapporto:** disponibile negli artifact" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **Rapporto:** non generato (vedi log)" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Turno Notturno — Report"
+            echo ""
+            echo "| Campo | Valore |"
+            echo "|---|---|"
+            echo "| Run ID | ${{ github.run_id }} |"
+            echo "| Data | $(date -u +%Y-%m-%d %H:%M UTC) |"
+            echo "| Esito | ${{ steps.stato.outputs.esito }} |"
+            echo "| Task | ${{ inputs.task || '(automatico)' }} |"
+            echo "| Ore | ${{ inputs.ore }} |"
+            echo "| Prova | ${{ inputs.prova && 'SI' || 'NO' }} |"
+            echo "| Commit | ${{ steps.stato.outputs.commit_count }} |"
+            echo ""
+            if [[ -f "$GITHUB_WORKSPACE/macchina/stato/RAPPORTO.md" ]]; then
+              echo "**Rapporto:** disponibile negli artifact"
+            else
+              echo "**Rapporto:** non generato"
+            fi
+          } >> $GITHUB_STEP_SUMMARY
 
     outputs:
       commit_count: ${{ steps.stato.outputs.commit_count }}
       esito: ${{ steps.stato.outputs.esito }}
+      bundle_created: ${{ steps.bundle.outputs.bundle_created }}
 
-  # Job 2: PUBLISH — crea branch e PR solo se ci sono commit
-  # Separato per least privilege: potrebbe avere permissions diversi se necessario
-  pubblicazzione-pr:
+  pubblicazione-pr:
     needs: esecuzione-turno
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: always() && !inputs.prova && needs.esecuzione-turno.outputs.esito != 'interrotto'
-    
+    if: always() && !inputs.prova && needs.esecuzione-turno.outputs.esito != 'interrotto' && needs.esecuzione-turno.outputs.bundle_created == 'true'
+
+    # SECURITY: write solo per push e PR — questo job NON esegue codice non trusted
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
-      # Scarico prima l'artifact per avere il RAPPORTO.md
-      - name: copia risultati dall'artifact
+      - name: scarica risultati
         uses: actions/download-artifact@v4
         with:
-          name: rapporto-${{ github.run_id }}
-          path: macchina-download
+          name: turno-risultati-${{ github.run_id }}
+          path: /tmp/artifact
 
-      # Checkout del bersaglio con token per push
+      - name: leggi base_sha
+        id: metadata
+        run: |
+          base_sha=$(cat /tmp/artifact/base_sha_for_bundle.txt 2>/dev/null || echo "")
+          echo "base_sha=$base_sha" >> $GITHUB_OUTPUT
+
       - name: checkout per PR
         uses: actions/checkout@v4
         with:
           ref: sviluppo
           fetch-depth: 0
           path: bersaglio
-          # Serve token per il push del branch
           token: ${{ github.token }}
+          # SECURITY: disabilita persistenza dopo il push
+          persist-credentials: false
+
+      - name: verifica integrità base
+        working-directory: bersaglio
+        env:
+          EXPECTED_BASE: ${{ steps.metadata.outputs.base_sha }}
+        run: |
+          if [[ -z "$EXPECTED_BASE" ]]; then
+            echo "::error::base_sha mancante"
+            exit 1
+          fi
+          current_sha=$(git rev-parse HEAD)
+          if [[ "$current_sha" != "$EXPECTED_BASE" ]]; then
+            echo "::error::sviluppo è cambiato: attesa $EXPECTED_BASE, attuale $current_sha"
+            exit 1
+          fi
+
+      - name: importa commit da bundle
+        working-directory: bersaglio
+        run: |
+          git bundle verify /tmp/artifact/commiti.bundle
+          new_head=$(git bundle unbundle /tmp/artifact/commiti.bundle | head -1 | cut -d' ' -f1)
+          [[ -n "$new_head" ]] && git reset --hard "$new_head"
 
       - name: la Pull Request
         working-directory: bersaglio
@@ -260,27 +280,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -z "$(git log origin/sviluppo..HEAD --oneline)" ]; then
-            echo "nessun commit: il turno non ha prodotto niente da rivedere."
+            echo "nessun commit da pushare"
             exit 0
           fi
           
-          # Branch name deterministico basato su run_id per evitare collisioni
           ramo="turno/${{ github.run_id }}"
           git push origin "HEAD:refs/heads/$ramo"
 
           corpo=/tmp/corpo.md
-          if [ -f "$GITHUB_WORKSPACE/macchina-download/stato/RAPPORTO.md" ]; then
-            cp "$GITHUB_WORKSPACE/macchina-download/stato/RAPPORTO.md" "$corpo"
-          else
-            echo "Il turno non ha lasciato un rapporto: guarda i log del job." > "$corpo"
-          fi
+          [[ -f "/tmp/artifact/stato/RAPPORTO.md" ]] && cp "/tmp/artifact/stato/RAPPORTO.md" "$corpo" || echo "Rapporto non disponibile" > "$corpo"
+          
           {
             echo ""
             echo "---"
-            echo ""
-            echo "Aperta dal turno notturno. **Da rivedere prima del merge**:"
-            echo "le guardie fermano il codice non verificato, non il codice"
-            echo "sbagliato che passa i suoi test — vedi il blocco #13."
+            echo "*Aperta dal turno notturno. Da rivedere prima del merge.*"
             echo ""
             echo "Job: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } >> "$corpo"
