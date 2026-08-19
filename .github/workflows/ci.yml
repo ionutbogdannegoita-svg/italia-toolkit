@@ -13,23 +13,34 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege: solo lettura per i test
 permissions:
   contents: read
+
+# Evita run multipli sulla stessa PR quando non serve
+concurrency:
+  group: ci-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
 
     steps:
+      # Checkout senza credenziali persistenti: non serve push qui
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Installa il pacchetto e le dipendenze di test
         run: |
@@ -44,12 +55,17 @@ jobs:
   # Se qualcuno infila `stdnum` dentro `italia/`, qui si accorge subito.
   runtime-pulito:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
+      # Checkout senza credenziali persistenti
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip
 
       - name: Installa SOLO il pacchetto, senza extra
         run: |
@@ -57,8 +73,8 @@ jobs:
           python -m pip install .
 
       - name: Importa la libreria a mani nude
+        working-directory: /tmp
         run: |
-          cd /tmp
           python -c "import italia; print('italia-toolkit', italia.__version__)"
 
       - name: Nessuna dipendenza di runtime deve essere finita nel pacchetto
