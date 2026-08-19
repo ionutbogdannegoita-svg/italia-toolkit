@@ -88,33 +88,44 @@ jobs:
           pip install -e ".[dev]"
 
       # SECURITY: input passati via env per evitare shell injection
+      # Validazione rigorosa: rifiuta newline, CR, caratteri di controllo
       - name: valida input
         id: validate-inputs
         env:
           RAW_TASK: ${{ inputs.task }}
           RAW_ORE: ${{ inputs.ore }}
         run: |
-          task="$RAW_TASK"
-          ore="$RAW_ORE"
-          
-          if [[ -n "$task" ]]; then
-            if ! echo "$task" | grep -qE '^([A-Z][0-9]+)( [A-Z][0-9]+)*$'; then
-              echo "::error::Input task non valido"
+          # Validazione task: solo pattern A123 o A123 B456, niente newline o caratteri speciali
+          if [[ -n "$RAW_TASK" ]]; then
+            # Rifiuta se contiene newline, CR, o caratteri di controllo
+            if echo "$RAW_TASK" | grep -qP '[\x00-\x1f\x7f]'; then
+              echo "::error::Task contiene caratteri di controllo non validi"
               exit 1
             fi
+            # Validazione formato: intera stringa deve matchare ^([A-Z][0-9]+)( [A-Z][0-9]+)*$
+            if ! echo "$RAW_TASK" | grep -qxE '([A-Z][0-9]+)( [A-Z][0-9]+)*'; then
+              echo "::error::Input task non valido: formato errato"
+              exit 1
+            fi
+            echo "TASK=$RAW_TASK" >> $GITHUB_OUTPUT
+          else
+            echo "TASK=" >> $GITHUB_OUTPUT
           fi
           
-          if ! echo "$ore" | grep -qE '^[0-9]+$'; then
-            echo "::error::Input ore non valido"
+          # Validazione ore: solo intero 1-24, niente altro
+          if echo "$RAW_ORE" | grep -qP '[\x00-\x1f\x7f]'; then
+            echo "::error::Ore contiene caratteri di controllo non validi"
             exit 1
           fi
-          if [[ "$ore" -lt 1 || "$ore" -gt 24 ]]; then
+          if ! echo "$RAW_ORE" | grep -qxE '[0-9]+'; then
+            echo "::error::Input ore non valido: deve essere un numero"
+            exit 1
+          fi
+          if [[ "$RAW_ORE" -lt 1 || "$RAW_ORE" -gt 24 ]]; then
             echo "::error::Input ore deve essere tra 1 e 24"
             exit 1
           fi
-          
-          echo "TASK=$task" >> $GITHUB_OUTPUT
-          echo "ORE=$ore" >> $GITHUB_OUTPUT
+          echo "ORE=$RAW_ORE" >> $GITHUB_OUTPUT
 
       - name: il turno
         working-directory: bersaglio
@@ -160,20 +171,36 @@ jobs:
           
           cp /tmp/base_sha.txt /tmp/base_sha_artifact.txt
 
-      - name: crea bundle dei commit
+      - name: conta commit e gestisci zero commit
         if: always()
         working-directory: bersaglio
+        id: conta
         run: |
           base_sha=$(cat /tmp/base_sha_artifact.txt)
           echo "$base_sha" > /tmp/base_sha_for_bundle.txt
           
           if git merge-base --is-ancestor "$base_sha" HEAD 2>/dev/null; then
-            git bundle create /tmp/commiti.bundle "$base_sha"..HEAD
-            echo "bundle_created=true" >> $GITHUB_OUTPUT
+            COUNT=$(git rev-list --count "$base_sha"..HEAD)
+            echo "commit_count=$COUNT" >> $GITHUB_OUTPUT
+            if [[ "$COUNT" -eq 0 ]]; then
+              echo "Nessun commit prodotto da Agnes"
+              echo "bundle_created=false" >> $GITHUB_OUTPUT
+              touch /tmp/no_commit.marker
+            else
+              echo "bundle_created=true" >> $GITHUB_OUTPUT
+            fi
           else
-            touch /tmp/no_bundle.marker
+            echo "commit_count=0" >> $GITHUB_OUTPUT
             echo "bundle_created=false" >> $GITHUB_OUTPUT
+            touch /tmp/no_commit.marker
           fi
+
+      - name: crea bundle dei commit (solo se COUNT > 0)
+        if: always() && steps.conta.outputs.bundle_created == 'true'
+        working-directory: bersaglio
+        run: |
+          base_sha=$(cat /tmp/base_sha_for_bundle.txt)
+          git bundle create /tmp/commiti.bundle "$base_sha"..HEAD
         id: bundle
 
       - name: il rapporto, comunque vada
@@ -186,13 +213,20 @@ jobs:
             macchina/risultati/scartati/
             /tmp/base_sha_for_bundle.txt
             /tmp/commiti.bundle
-            /tmp/no_bundle.marker
+            /tmp/no_commit.marker
           if-no-files-found: warn
           retention-days: 30
 
       - name: genera summary
         if: always()
+        env:
+          SUMMARY_TASK: ${{ steps.validate-inputs.outputs.TASK }}
+          SUMMARY_ORE: ${{ steps.validate-inputs.outputs.ORE }}
+          SUMMARY_ESITO: ${{ steps.stato.outputs.esito }}
+          SUMMARY_COMMIT: ${{ steps.stato.outputs.commit_count }}
+          SUMMARY_PROVA: ${{ inputs.prova && 'SI' || 'NO' }}
         run: |
+          task_display="${SUMMARY_TASK:-(automatico)}"
           {
             echo "## Turno Notturno — Report"
             echo ""
@@ -200,11 +234,11 @@ jobs:
             echo "|---|---|"
             echo "| Run ID | ${{ github.run_id }} |"
             echo "| Data | $(date -u +%Y-%m-%d %H:%M UTC) |"
-            echo "| Esito | ${{ steps.stato.outputs.esito }} |"
-            echo "| Task | ${{ inputs.task || '(automatico)' }} |"
-            echo "| Ore | ${{ inputs.ore }} |"
-            echo "| Prova | ${{ inputs.prova && 'SI' || 'NO' }} |"
-            echo "| Commit | ${{ steps.stato.outputs.commit_count }} |"
+            echo "| Esito | $SUMMARY_ESITO |"
+            echo "| Task | $task_display |"
+            echo "| Ore | $SUMMARY_ORE |"
+            echo "| Prova | $SUMMARY_PROVA |"
+            echo "| Commit | $SUMMARY_COMMIT |"
             echo ""
             if [[ -f "$GITHUB_WORKSPACE/macchina/stato/RAPPORTO.md" ]]; then
               echo "**Rapporto:** disponibile negli artifact"
@@ -242,15 +276,16 @@ jobs:
           base_sha=$(cat /tmp/artifact/base_sha_for_bundle.txt 2>/dev/null || echo "")
           echo "base_sha=$base_sha" >> $GITHUB_OUTPUT
 
-      - name: checkout per PR
+      - name: checkout per PR (con credenziali persistenti per il push)
         uses: actions/checkout@v4
         with:
           ref: sviluppo
           fetch-depth: 0
           path: bersaglio
-          token: ${{ github.token }}
-          # SECURITY: disabilita persistenza dopo il push
-          persist-credentials: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # SECURITY: persist-credentials=true SOLO qui perché dobbiamo fare git push
+          # Il job esecuzione-turno ha persist-credentials=false e contents:read
+          persist-credentials: true
 
       - name: verifica integrità base
         working-directory: bersaglio
@@ -274,10 +309,37 @@ jobs:
           new_head=$(git bundle unbundle /tmp/artifact/commiti.bundle | head -1 | cut -d' ' -f1)
           [[ -n "$new_head" ]] && git reset --hard "$new_head"
 
+      - name: GUARDIA STRUTTURALE - percorsi vietati
+        working-directory: bersaglio
+        run: |
+          # Questa guardia ispeziona i path modificati SENZA eseguire codice
+          # Rifiuta modifiche a file del control plane
+
+          BASE_SHA=$(cat /tmp/artifact/base_sha_for_bundle.txt)
+          VIETATI=0
+
+          # Lista file modificati nel bundle
+          MODIFICATI=$(git diff-tree --no-commit-id --name-only -r "$BASE_SHA"..HEAD)
+
+          # Percorsi vietati dal progetto
+          for pattern in ".github/" "AGENTS.md" "fonti/"; do
+            if echo "$MODIFICATI" | grep -qE "^$pattern"; then
+              echo "::error::Modifica vietata rilevata: $pattern"
+              VIETATI=1
+            fi
+          done
+
+          if [[ "$VIETATI" -eq 1 ]]; then
+            echo "::error::Il bundle contiene modifiche al control plane o alle fonti"
+            exit 1
+          fi
+
+          echo "Guardia strutturale passata: nessun percorso vietato modificato"
+
       - name: la Pull Request
         working-directory: bersaglio
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$(git log origin/sviluppo..HEAD --oneline)" ]; then
             echo "nessun commit da pushare"
@@ -285,10 +347,10 @@ jobs:
           fi
           
           ramo="turno/${{ github.run_id }}"
-          git push origin "HEAD:refs/heads/$ramo"
+          git push -u origin "HEAD:refs/heads/$ramo"
 
           corpo=/tmp/corpo.md
-          [[ -f "/tmp/artifact/stato/RAPPORTO.md" ]] && cp "/tmp/artifact/stato/RAPPORTO.md" "$corpo" || echo "Rapporto non disponibile" > "$corpo"
+          [[ -f "/tmp/artifact/stato/RAPPORTO.md" ]] && cat "/tmp/artifact/stato/RAPPORTO.md" > "$corpo" || echo "Rapporto non disponibile" > "$corpo"
           
           {
             echo ""
