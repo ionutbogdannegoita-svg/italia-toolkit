@@ -1,0 +1,31 @@
+# CODEOWNERS — chi deve revisionare le modifiche critiche
+#
+# Questo file definisce i proprietari per parti del repository che richiedono
+# attenzione speciale. GitHub usa queste regole per:
+# - Richiedere review automatiche su PR che toccano questi file
+# - Segnalare chi ha l'ultima parola su decisioni tecniche
+#
+# NOTA DI SICUREZZA IMPORTANTE:
+# CODEOWNERS da solo NON è un security boundary. Funziona SOLO se
+# accompagnato da branch protection rules che impongono:
+# 1. Almeno una review richiesta per merge su `main` e `sviluppo`
+# 2. CODEOWNERS come required reviewer (opzione "Require review from Code Owners")
+# 3. Nessun bypass tranne che per emergenza documentata
+#
+# Senza queste impostazioni, CODEOWNERS è solo un suggerimento.
+
+# Default: il proprietario del repository
+* @ionutbogdannegoita-svg
+
+# Control Plane — le regole del gioco
+# Queste modifiche cambiano come lavora Agnes o come viene giudicata
+/.github/workflows/ @ionutbogdannegoita-svg
+/AGENTS.md @ionutbogdannegoita-svg
+
+# Fonti — l'oracolo del dominio
+# Cambiare un algoritmo qui significa cambiare tutti i test a valle
+/fonti/ @ionutbogdannegoita-svg
+
+# Documentazione di progetto
+/README.md @ionutbogdannegoita-svg
+/ROADMAP.md @ionutbogdannegoita-svg

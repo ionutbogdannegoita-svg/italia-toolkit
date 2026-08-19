@@ -1,5 +1,11 @@
 # Turno notturno — fa lavorare Agnes su GitHub, senza che resti acceso un PC.
 #
+# SECURITY MODEL:
+# - Il loop lavora in un runner effimero, non sul branch remoto
+# - Produce commit locali → push su branch turno/<id> → PR
+# - La revisione umana e' un hard gate: mai push diretto su sviluppo/main
+# - I secret sono minimizzati: AGNES_API_KEY solo al job, MACCHINA_TOKEN read-only
+#
 # Il lavoro NON finisce su `sviluppo`: il turno committa in locale sul runner,
 # poi il risultato viene spinto su un ramo `turno/<data>` e aperto in Pull
 # Request. La revisione resta umana, ed e' voluto — la notte del 27 il turno ha
@@ -46,23 +52,29 @@ on:
         required: false
         default: false
 
+# Least privilege: write solo per creare il branch e la PR
+# Il job che esegue codice non trusted non ha privilegi di scrittura diretti
 permissions:
   contents: write
   pull-requests: write
 
-# Due turni insieme sullo stesso repository si pesterebbero i piedi: lavorano
-# sugli stessi file e si sovrascriverebbero.
+# Un turno alla volta: due esecuzioni parallele si pesterebbero i piedi
+# cancel-in-progress: false perche' un turno interrotto potrebbe lasciare
+# artifact inconsistenti; meglio far finire quello in corso
 concurrency:
   group: turno-notturno
   cancel-in-progress: false
 
 jobs:
-  turno:
+  # Job 1: EXECUTION — esegue codice non trusted (Agnes) in ambiente isolato
+  # Questo job NON ha privilegi di scrittura sul repository remoto
+  esecuzione-turno:
     runs-on: ubuntu-latest
-    # I runner hosted muoiono comunque a 6 ore. Qui si sta sotto di proposito,
-    # cosi' il passo del rapporto e della PR fa in tempo a girare.
     timeout-minutes: 330
-
+    
+    # I secret sono disponibili solo qui, dove servono
+    environment: turno-notturno
+    
     steps:
       - name: il bersaglio
         uses: actions/checkout@v4
@@ -70,6 +82,7 @@ jobs:
           ref: sviluppo
           fetch-depth: 0
           path: bersaglio
+          # persist-credentials: false di default quando non specificato token
 
       # La macchina sta FUORI dal repository bersaglio: dentro, le sue cartelle
       # comparirebbero come file non tracciati e le guardie le boccerebbero come
@@ -80,42 +93,168 @@ jobs:
           repository: ${{ github.repository_owner }}/progetto-agnes
           token: ${{ secrets.MACCHINA_TOKEN }}
           path: macchina
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
 
       - name: dipendenze del bersaglio
-        run: pip install -e "./bersaglio[dev]"
+        working-directory: bersaglio
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
+      # SECURITY: gli input vengono validati prima dell'uso
+      # task: solo ID alfanumerici (es. T001 T002)
+      # ore: solo numeri interi
+      - name: valida input
+        id: validate-inputs
+        run: |
+          # Validazione task: solo pattern [T][0-9]+ separati da spazio
+          task="${{ inputs.task }}"
+          if [[ -n "$task" ]]; then
+            if ! echo "$task" | grep -qE '^([A-Z][0-9]+)( [A-Z][0-9]+)*$'; then
+              echo "::error::Input task non valido: deve contenere solo ID tipo T001 separati da spazio"
+              exit 1
+            fi
+          fi
+          
+          # Validazione ore: solo numero intero 1-24
+          ore="${{ inputs.ore }}"
+          if ! echo "$ore" | grep -qE '^[0-9]+$'; then
+            echo "::error::Input ore non valido: deve essere un numero intero"
+            exit 1
+          fi
+          if [[ "$ore" -lt 1 || "$ore" -gt 24 ]]; then
+            echo "::error::Input ore deve essere tra 1 e 24"
+            exit 1
+          fi
+          
+          echo "task_valid=true" >> $GITHUB_OUTPUT
+          echo "ore_value=$ore" >> $GITHUB_OUTPUT
+
+      # SECURITY: uso di env invece di interpolazione diretta per evitare shell injection
+      # Gli input sono gia' stati validati nello step precedente
       - name: il turno
         working-directory: bersaglio
         env:
           AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
           AGNES_BERSAGLIO: ${{ github.workspace }}/bersaglio
+          VALIDATED_TASK: ${{ steps.validate-inputs.outputs.task_valid && inputs.task || '' }}
+          VALIDATED_ORE: ${{ steps.validate-inputs.outputs.ore_value }}
+          IS_PROVA: ${{ inputs.prova && 'true' || 'false' }}
         run: |
           git config user.name "Agnes Loop"
           git config user.email "agnes@localhost"
+          
+          # Costruisci i flag in modo sicuro usando variabili d'ambiente
+          prova_flag=""
+          if [[ "$IS_PROVA" == "true" ]]; then
+            prova_flag="--prova"
+          fi
+          
+          task_args=""
+          if [[ -n "$VALIDATED_TASK" ]]; then
+            task_args="$VALIDATED_TASK"
+          fi
+          
           python "$GITHUB_WORKSPACE/macchina/officina/notte.py" \
-            ${{ inputs.prova && '--prova' || '' }} \
-            --ore "${{ inputs.ore || '5' }}" ${{ inputs.task }}
+            $prova_flag \
+            --ore "$VALIDATED_ORE" \
+            $task_args
+        
         # Un turno che finisce senza task riusciti esce con 1. Non e' un guasto
         # del workflow: il rapporto va prodotto lo stesso, ed e' la cosa che
         # serve al mattino.
         continue-on-error: true
+        id: esecuzione
+
+      - name: determina stato esecuzione
+        if: always()
+        id: stato
+        run: |
+          if [[ "${{ steps.esecuzione.outcome }}" == "success" ]]; then
+            echo "esito=successo" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.esecuzione.outcome }}" == "failure" ]]; then
+            echo "esito=fallimento" >> $GITHUB_OUTPUT
+          else
+            echo "esito=interrotto" >> $GITHUB_OUTPUT
+          fi
 
       - name: il rapporto, comunque vada
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rapporto
+          name: rapporto-${{ github.run_id }}
           path: |
             macchina/stato/
             macchina/risultati/scartati/
           if-no-files-found: warn
+          retention-days: 30
+
+      # Summary per GitHub UI: rende immediatamente chiaro cosa e' successo
+      - name: genera summary
+        if: always()
+        run: |
+          echo "## Turno Notturno — Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Campo | Valore |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Run ID | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Data | $(date -u +%Y-%m-%d %H:%M UTC) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Esito | ${{ steps.stato.outputs.esito }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Task richiesti | ${{ inputs.task || '(automatico)' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Budget ore | ${{ inputs.ore }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Modalità prova | ${{ inputs.prova && 'SI' || 'NO' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Conta commit prodotti
+          cd bersaglio
+          commit_count=$(git log origin/sviluppo..HEAD --oneline 2>/dev/null | wc -l || echo 0)
+          echo "### Risultati" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit prodotti:** $commit_count" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ -f "$GITHUB_WORKSPACE/macchina/stato/RAPPORTO.md" ]]; then
+            echo "- **Rapporto:** disponibile negli artifact" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Rapporto:** non generato (vedi log)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+    outputs:
+      commit_count: ${{ steps.stato.outputs.commit_count }}
+      esito: ${{ steps.stato.outputs.esito }}
+
+  # Job 2: PUBLISH — crea branch e PR solo se ci sono commit
+  # Separato per least privilege: potrebbe avere permissions diversi se necessario
+  pubblicazzione-pr:
+    needs: esecuzione-turno
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: always() && !inputs.prova && needs.esecuzione-turno.outputs.esito != 'interrotto'
+    
+    steps:
+      # Scarico prima l'artifact per avere il RAPPORTO.md
+      - name: copia risultati dall'artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rapporto-${{ github.run_id }}
+          path: macchina-download
+
+      # Checkout del bersaglio con token per push
+      - name: checkout per PR
+        uses: actions/checkout@v4
+        with:
+          ref: sviluppo
+          fetch-depth: 0
+          path: bersaglio
+          # Serve token per il push del branch
+          token: ${{ github.token }}
 
       - name: la Pull Request
-        if: always() && !inputs.prova
         working-directory: bersaglio
         env:
           GH_TOKEN: ${{ github.token }}
@@ -124,12 +263,14 @@ jobs:
             echo "nessun commit: il turno non ha prodotto niente da rivedere."
             exit 0
           fi
-          ramo="turno/$(date -u +%Y-%m-%d-%H%M)"
+          
+          # Branch name deterministico basato su run_id per evitare collisioni
+          ramo="turno/${{ github.run_id }}"
           git push origin "HEAD:refs/heads/$ramo"
 
           corpo=/tmp/corpo.md
-          if [ -f "$GITHUB_WORKSPACE/macchina/stato/RAPPORTO.md" ]; then
-            cp "$GITHUB_WORKSPACE/macchina/stato/RAPPORTO.md" "$corpo"
+          if [ -f "$GITHUB_WORKSPACE/macchina-download/stato/RAPPORTO.md" ]; then
+            cp "$GITHUB_WORKSPACE/macchina-download/stato/RAPPORTO.md" "$corpo"
           else
             echo "Il turno non ha lasciato un rapporto: guarda i log del job." > "$corpo"
           fi

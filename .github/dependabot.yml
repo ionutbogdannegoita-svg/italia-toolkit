@@ -1,0 +1,60 @@
+# Dependabot — aggiornamenti automatici delle dipendenze
+#
+# Questo repository ha due tipi di dipendenze:
+# 1. GitHub Actions (security-critical: sono nel control plane)
+# 2. Python packages (solo dev: pytest, hypothesis, python-stdnum)
+#
+# Per le Actions usiamo il grouping per ridurre lo spam di PR.
+# Per Python non serve Dependabot: la libreria non ha dipendenze runtime,
+# e quelle di test si aggiornano quando serve senza fretta.
+
+version: 2
+updates:
+  # GitHub Actions: aggiornamenti mensili raggruppati
+  # Le Actions sono parte del trusted control plane, quindi vanno tenute d'occhio
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Rome"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(actions)"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    # OpenPR limit: massimo una PR aperta per gruppo, così non si accumolano
+    open-pull-requests-limit: 1
+
+  # Python dependencies: solo per il dev, nessun rush
+  # La libreria non ha dipendenze runtime, quindi questo è opzionale
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Rome"
+    groups:
+      python-dev:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "python"
+    open-pull-requests-limit: 1
+    # Ignora major updates: richiedono review manuale per breaking changes
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
